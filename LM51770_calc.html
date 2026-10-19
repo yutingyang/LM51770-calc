@@ -73,6 +73,27 @@ h3 { font-size: 14px; margin: 12px 0 6px; color: var(--muted); }
 .kpi { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
 .kpi b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
 .kpi span { color: var(--muted); font-size: 12px; }
+#vinpanel { margin: 16px 16px 0; }
+.vp-grid { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; }
+.vp-grid.half { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.vp-grid > div { min-width: 0; }
+#vin_phase { overflow-x: auto; }
+@media (max-width: 900px) { .vp-grid, .vp-grid.half { grid-template-columns: 1fr; } }
+.basic { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.basic .field { grid-template-columns: 1fr 76px 34px; margin: 2px 0; }
+.slider { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
+.slider input[type=range] { flex: 1 1 260px; accent-color: var(--accent); height: 28px; }
+.slider input[type=number] { width: 90px; font-size: 16px; font-weight: 600; }
+.slider .quick button { padding: 2px 8px; font-size: 12px; }
+.modebig { font-size: 22px; font-weight: 700; padding: 2px 12px; border-radius: 6px; display: inline-block; }
+.modebig.BUCK { background: var(--buck); } .modebig.BOOST { background: var(--boost); } .modebig.BUCK-BOOST { background: var(--bb); }
+.why { color: var(--muted); margin: 6px 0 10px; }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--accent-soft);
+  border-radius: 6px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sw { display: inline-block; min-width: 30px; text-align: center; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.sw.on { background: var(--accent); color: #fff; } .sw.off { color: var(--muted); border: 1px solid var(--line); }
+.modebar text { fill: var(--ink); font-size: 11px; }
+.modebar .lbl { fill: var(--muted); }
 .tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 4px 8px; font-size: 12px; display: none; z-index: 10; white-space: pre; }
 </style>
@@ -98,6 +119,26 @@ h3 { font-size: 14px; margin: 12px 0 6px; color: var(--muted); }
     <button id="export" class="primary">匯出 JSON</button>
   </div>
 </header>
+<section class="panel" id="vinpanel">
+  <h2>基本參數與 VIN 工作點</h2>
+  <div class="vp-grid">
+    <div><div class="basic" id="basic"></div>
+      <p class="note">這些欄位與左側 Step 1 / 2 / 3 的輸入同步。</p></div>
+    <div>
+      <div class="slider">
+        <b>VIN</b>
+        <input type="range" id="vin_slider" step="0.05" aria-label="VIN">
+        <input type="number" id="vin_value" step="0.05" aria-label="VIN 數值"> <span>V</span>
+        <span class="quick"><button data-q="vin_min">min</button> <button data-q="vin_nom">nom</button> <button data-q="vin_max">max</button></span>
+      </div>
+      <div id="vin_out"></div>
+    </div>
+  </div>
+  <div class="vp-grid half" style="margin-top:8px">
+    <div><h3>本 VIN 的三相位（開關狀態）</h3><div id="vin_phase"></div></div>
+    <div><h3>本 VIN 的電感電流波形</h3><div class="chart" id="ch_vin_il"></div></div>
+  </div>
+</section>
 <main>
   <section class="panel inputs" id="inputs"></section>
   <section class="results" id="results"></section>
@@ -744,6 +785,7 @@ function buildInputs() {
         } else {
           design[key] = ctl.value === "" ? null : Number(ctl.value) * scale;
         }
+        syncInputs();
         update();
       });
       const lab = document.createElement("span"); lab.textContent = label;
@@ -1017,9 +1059,174 @@ function render(r) {
     series: [{ x: el.iout, y: el.efficiency, name: "效率", color: css("--c1") }, { x: el.iout, y: el.total_loss, name: "總損耗", color: css("--c2"), axis: 2, dash: "5 4" }] });
 }
 
+/* ---------- 基本參數 + VIN 滑桿 ---------- */
+const BASIC = [["vin_min", "VIN(min)", "V", 1], ["vin_max", "VIN(max)", "V", 1], ["vin_nom", "VIN(nom)", "V", 1],
+  ["vout", "VOUT", "V", 1], ["iout", "IOUT", "A", 1], ["fsw", "fSW", "kHz", 1e3], ["lf", "L", "µH", 1e-6],
+  ["rdcr", "DCR", "mΩ", 1e-3], ["rs", "RS", "mΩ", 1e-3], ["efficiency", "η 估計", "%", 0.01]];
+let sliderVin = null;
+
+function buildBasic() {
+  const box = $("#basic");
+  box.innerHTML = "";
+  for (const [key, label, unit, scale] of BASIC) {
+    const row = document.createElement("div");
+    row.className = "field";
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.step = "any"; inp.id = "bp_" + key;
+    inp.addEventListener("change", () => { design[key] = Number(inp.value) * scale; syncInputs(); update(); });
+    const lab = document.createElement("span"); lab.textContent = label;
+    const u = document.createElement("span"); u.className = "u"; u.textContent = unit;
+    row.append(lab, inp, u); box.append(row);
+  }
+  syncInputs();
+}
+/* 讓左側輸入與基本參數欄位顯示同一個值 */
+function syncInputs() {
+  const all = FIELDS.flatMap(g => g[1]).concat(BASIC);
+  for (const [key, , , scale, , opts] of all) {
+    for (const id of ["in_" + key, "bp_" + key]) {
+      const el = document.getElementById(id);
+      if (!el || el === document.activeElement) continue;
+      if (opts) el.value = String(design[key]);
+      else el.value = design[key] === null ? "" : round6(design[key] / scale);
+    }
+  }
+}
+
+function modeReason(v, op, tr, model) {
+  const f = x => fmt(x, 2) + " V";
+  if (model === "xlsm") return `xlsm 原始算法：VIN ${v > design.vout ? ">" : "≤"} VOUT (${f(design.vout)}) → ${op.mode}`;
+  if (!design.mode_fpwm) return `PSM 模式：轉換點都簡化為 VOUT (${f(design.vout)})，VIN ${v > design.vout ? ">" : "≤"} VOUT → ${op.mode}`;
+  if (design.vin_direction === "falling") {
+    if (op.mode === "BUCK") return `VIN 下降：VIN > Buck→BB ${f(tr.vin_buck_to_bb)} → 維持 BUCK`;
+    if (op.mode === "BOOST") return `VIN 下降：VIN ≤ BB→Boost ${f(tr.vin_bb_to_boost)} → BOOST`;
+    return `VIN 下降：BB→Boost ${f(tr.vin_bb_to_boost)} < VIN ≤ Buck→BB ${f(tr.vin_buck_to_bb)} → BUCK-BOOST`;
+  }
+  if (op.mode === "BUCK") return `VIN 上升：VIN > BB→Buck ${f(tr.vin_bb_to_buck)} → BUCK`;
+  if (op.mode === "BOOST") return `VIN 上升：VIN ≤ Boost→BB ${f(tr.vin_boost_to_bb)} → 維持 BOOST`;
+  return `VIN 上升：Boost→BB ${f(tr.vin_boost_to_bb)} < VIN ≤ BB→Buck ${f(tr.vin_bb_to_buck)} → BUCK-BOOST`;
+}
+
+function dutyFormula(v, op, tr, model) {
+  const d = design, n = (x, k = 4) => fmt(x, k), T = 1 / d.fsw;
+  if (op.mode === "BUCK-BOOST") {
+    return `T  = 1/fSW = ${n(T * 1e9, 1)} ns,  tmin = ${n(tr.t_min_pulse * 1e9, 1)} ns
+t1 (Q1+Q3) = T − (0.175·T + 2·tmin)          = ${n(op.t1 * 1e9, 1)} ns
+t2 (Q1+Q4) = (VOUT·T − VIN·t1) / (VIN + VOUT) = (${n(d.vout, 2)}·${n(T * 1e9, 1)} − ${n(v, 2)}·${n(op.t1 * 1e9, 1)}) / ${n(v + d.vout, 2)} = ${n(op.t2 * 1e9, 1)} ns
+t3 (Q2+Q3) = T − t1 − t2                      = ${n(op.t3 * 1e9, 1)} ns
+D_buck  (Q1) = (t1 + t2)/T = ${n(op.d_buck_leg)}
+D_boost (Q4) = t2 / T      = ${n(op.d_boost_leg)}
+檢查 VOUT/VIN = D_buck / (1 − D_boost) = ${n(op.d_buck_leg / (1 - op.d_boost_leg))}  (${n(d.vout / v)})`;
+  }
+  if (model === "xlsm") {
+    if (op.mode === "BUCK") return `D = (VOUT + IOUT·(DCR+RS)) / (VIN + IOUT·RS)
+  = (${n(d.vout, 2)} + ${n(op.iout, 2)}·${n((d.rdcr + d.rs) * 1e3, 2)} mΩ) / (${n(v, 2)} + ${n(op.iout, 2)}·${n(d.rs * 1e3, 2)} mΩ) = ${n(op.duty)}`;
+    return `IIN = VOUT·IOUT/(VIN·η) = ${n(op.iin, 3)} A
+D = (VOUT − VIN + IIN·DCR) / (VOUT − IIN·RS)
+  = (${n(d.vout, 2)} − ${n(v, 2)} + ${n(op.iin, 3)}·${n(d.rdcr * 1e3, 2)} mΩ) / (${n(d.vout, 2)} − ${n(op.iin, 3)}·${n(d.rs * 1e3, 2)} mΩ) = ${n(op.duty)}`;
+  }
+  const r1 = d.q1.rdson, r2 = d.q2.rdson, r3 = d.q3.rdson, r4 = d.q4.rdson;
+  if (op.mode === "BUCK") return `D_buck = (VOUT + (RDS2+RS+DCR)·IOUT) / (VIN + (RS+RDS2−RDS1)·IOUT)
+       = (${n(d.vout, 2)} + ${n((r2 + d.rs + d.rdcr) * 1e3, 2)} mΩ·${n(op.iout, 2)}) / (${n(v, 2)} + ${n((d.rs + r2 - r1) * 1e3, 2)} mΩ·${n(op.iout, 2)}) = ${n(op.duty)}
+D_boost = 0（Q3 常通、Q4 關）`;
+  return `IIN = VOUT·IOUT/(VIN·η) = ${n(op.iin, 3)} A
+D_boost = (VOUT + (RDS3+DCR)·IIN − VIN) / (VOUT + (RDS3−RDS4−RS)·IIN)
+        = (${n(d.vout, 2)} + ${n((r3 + d.rdcr) * 1e3, 2)} mΩ·${n(op.iin, 3)} − ${n(v, 2)}) / (${n(d.vout, 2)} + ${n((r3 - r4 - d.rs) * 1e3, 2)} mΩ·${n(op.iin, 3)}) = ${n(op.duty)}
+D_buck = 1（Q1 常通、Q2 關）`;
+}
+
+/* 兩列模式帶：VIN 上升 / VIN 下降，標示轉換電壓與目前 VIN */
+function modeBar(v, tr, model) {
+  const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+  const lo = Math.min(design.vin_min, v), hi = Math.max(design.vin_max, v);
+  const W = 640, H = 104, ml = 66, mr = 12, pw = W - ml - mr;
+  const tx = x => ml + (Math.min(Math.max(x, lo), hi) - lo) / (hi - lo || 1) * pw;
+  const fill = m => css(m === "BUCK" ? "--buck" : m === "BOOST" ? "--boost" : "--bb");
+  const simple = model === "xlsm" || !design.mode_fpwm;
+  const rows = simple
+    ? [{ name: model === "xlsm" ? "xlsm" : "PSM", a: design.vout, b: design.vout, active: true }]
+    : [{ name: "VIN 上升", a: tr.vin_boost_to_bb, b: tr.vin_bb_to_buck, active: design.vin_direction !== "falling" },
+       { name: "VIN 下降", a: tr.vin_bb_to_boost, b: tr.vin_buck_to_bb, active: design.vin_direction === "falling" }];
+  let s = `<svg class="modebar" viewBox="0 0 ${W} ${H}" role="img" aria-label="Buck / Buck-Boost / Boost 區間">`;
+  rows.forEach((r, i) => {
+    const y = 8 + i * 34, h = 24;
+    const segs = [["BOOST", lo, r.a], ["BUCK-BOOST", r.a, r.b], ["BUCK", r.b, hi]];
+    for (const [m, a, b] of segs) {
+      const x0 = tx(a), x1 = tx(b);
+      if (x1 - x0 < 0.5) continue;
+      s += `<rect x="${x0}" y="${y}" width="${x1 - x0}" height="${h}" fill="${fill(m)}" stroke="var(--line)"/>`;
+      if (x1 - x0 > 46) s += `<text x="${(x0 + x1) / 2}" y="${y + 16}" text-anchor="middle">${m}</text>`;
+    }
+    s += `<text class="lbl" x="${ml - 6}" y="${y + 16}" text-anchor="end" font-weight="${r.active ? 700 : 400}">${r.name}${r.active ? " ●" : ""}</text>`;
+    for (const t of new Set([r.a, r.b])) if (t > lo && t < hi) s += `<text class="lbl" x="${tx(t)}" y="${y + h + 9}" text-anchor="middle" font-size="10">${fmt(t, 2)}</text>`;
+  });
+  const by = 8 + rows.length * 34;
+  s += `<text class="lbl" x="${ml}" y="${by + 10}">${fmt(lo, 1)} V</text><text class="lbl" x="${ml + pw}" y="${by + 10}" text-anchor="end">${fmt(hi, 1)} V</text>`;
+  s += `<line x1="${tx(v)}" x2="${tx(v)}" y1="2" y2="${by}" stroke="var(--warn)" stroke-width="2"/>`;
+  s += `<text x="${tx(v)}" y="${by + 10}" text-anchor="middle" fill="var(--warn)" font-weight="700">VIN ${fmt(v, 2)}</text></svg>`;
+  return s;
+}
+
+function renderVin() {
+  const model = $("#model").value;
+  const lo = design.vin_min, hi = design.vin_max;
+  if (sliderVin === null || !isFinite(sliderVin)) sliderVin = design.vin_nom;
+  sliderVin = Math.min(Math.max(sliderVin, lo), hi);
+  const sl = $("#vin_slider");
+  sl.min = lo; sl.max = hi; sl.value = sliderVin;
+  if (document.activeElement !== $("#vin_value")) $("#vin_value").value = round6(sliderVin);
+  const v = sliderVin;
+  let op, ls, tr;
+  try {
+    op = operatingPoint(design, v, null, model);
+    ls = losses(design, v);
+    tr = lm5177Transitions(design.fsw, design.vout, design.timing_device);
+  } catch (e) { $("#vin_out").innerHTML = `<p class="warn">計算錯誤：${e.message}</p>`; return; }
+  const T = 1 / design.fsw;
+  $("#vin_out").innerHTML = `
+    <div><span class="modebig ${op.mode}">${op.mode}</span></div>
+    <div class="why">${modeReason(v, op, tr, model)}</div>
+    <div class="kpis">
+      <div class="kpi"><span>D Buck 臂 (Q1 導通比)</span><b>${fmt(op.d_buck_leg, 4)}</b></div>
+      <div class="kpi"><span>D Boost 臂 (Q4 導通比)</span><b>${fmt(op.d_boost_leg, 4)}</b></div>
+      <div class="kpi"><span>轉換比 VOUT/VIN</span><b>${fmt(design.vout / v, 4)}</b></div>
+      <div class="kpi"><span>IIN / IL 平均</span><b>${fmt(op.iin, 2)} / ${fmt(op.il_avg, 2)} A</b></div>
+      <div class="kpi"><span>IL 峰值 / ΔIL</span><b>${fmt(op.il_peak, 2)} / ${fmt(op.ripple, 2)} A</b></div>
+      <div class="kpi"><span>效率（估算）</span><b>${fmt(ls.efficiency * 100, 2)} %</b></div>
+    </div>
+    <h3>Duty 計算</h3><div class="formula">${dutyFormula(v, op, tr, model)}</div>
+    <h3>模式區間</h3><div class="chart">${modeBar(v, tr, model)}</div>`;
+  const slope = sw => {
+    const a = sw.includes("Q1"), b = sw.includes("Q3");
+    if (a && b) return "(VIN−VOUT)/L"; if (a) return "VIN/L"; if (b) return "−VOUT/L"; return "0";
+  };
+  const swCell = (sg, q) => `<td><span class="sw ${sg.on.includes(q) ? "on" : "off"}">${sg.on.includes(q) ? "ON" : "off"}</span></td>`;
+  $("#vin_phase").innerHTML = `<table><tr><th>相位</th><th>時間</th><th>%T</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>diL/dt</th><th>iL (A)</th></tr>
+    ${op.segments.map((sg, i) => `<tr><td>t${i + 1}</td><td class="v">${fmt(sg.dt * 1e9, 0)} ns</td><td class="v">${fmt(sg.dt / T * 100, 1)}</td>
+      ${["Q1", "Q2", "Q3", "Q4"].map(q => swCell(sg, q)).join("")}<td>${slope(sg.on)}</td>
+      <td class="v">${fmt(sg.i_start, 2)} → ${fmt(sg.i_end, 2)}</td></tr>`).join("")}</table>
+    <p class="note">Q1/Q2：Buck 臂高側 / 低側；Q3/Q4：Boost 臂高側 / 低側。RMS：IL ${fmt(op.il_rms, 2)} A、Q1 ${fmt(op.irms.Q1, 2)}、Q2 ${fmt(op.irms.Q2, 2)}、Q3 ${fmt(op.irms.Q3, 2)}、Q4 ${fmt(op.irms.Q4, 2)} A；CIN ${fmt(op.icin_rms, 2)}、COUT ${fmt(op.icout_rms, 2)} Arms。</p>`;
+  const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+  const xs = [0], ys = [op.segments[0].i_start]; let t = 0;
+  for (const sg of op.segments) { t += sg.dt; xs.push(t * 1e6); ys.push(sg.i_end); }
+  // 兩個週期，看得出週期性
+  const xs2 = xs.concat(xs.slice(1).map(x => x + T * 1e6)), ys2 = ys.concat(ys.slice(1));
+  const vl = []; let tt = 0;
+  for (let k = 0; k < 2; k++) op.segments.forEach((sg, i) => { if (tt > 0) vl.push({ x: tt * 1e6, label: "" }); tt += sg.dt; });
+  plot($("#ch_vin_il"), { xlabel: "t (µs)", ylabel: "iL (A)", height: 230, xrange: [0, 2 * T * 1e6],
+    series: [{ x: xs2, y: ys2, name: `iL @ ${fmt(v, 2)} V (${op.mode})`, color: css("--c1") },
+      { x: [0, 2 * T * 1e6], y: [op.il_avg, op.il_avg], name: "平均", color: css("--muted"), dash: "4 3" }],
+    vlines: vl });
+}
+
+$("#vin_slider").addEventListener("input", e => { sliderVin = Number(e.target.value); renderVin(); });
+$("#vin_value").addEventListener("change", e => { sliderVin = Number(e.target.value); renderVin(); });
+document.querySelectorAll("#vinpanel .quick button").forEach(b => b.addEventListener("click", () => { sliderVin = design[b.dataset.q]; renderVin(); }));
+
 function update() {
   design.vin_direction = $("#vin_direction").value;
   saveDesign();
+  renderVin();
   try {
     lastResult = calculate(design, $("#model").value);
     render(lastResult);
@@ -1036,7 +1243,7 @@ $("#theme").addEventListener("change", e => {
   else document.documentElement.removeAttribute("data-theme");
   update();
 });
-$("#reset").addEventListener("click", () => { design = defaultDesign(); buildInputs(); $("#vin_direction").value = "rising"; update(); });
+$("#reset").addEventListener("click", () => { design = defaultDesign(); sliderVin = null; buildInputs(); buildBasic(); $("#vin_direction").value = "rising"; update(); });
 $("#export").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify({ inputs: design, results: lastResult }, null, 1)], { type: "application/json" });
   const a = document.createElement("a");
@@ -1045,6 +1252,7 @@ $("#export").addEventListener("click", () => {
 });
 $("#vin_direction").value = design.vin_direction || "rising";
 buildInputs();
+buildBasic();
 update();
 </script>
 </body>

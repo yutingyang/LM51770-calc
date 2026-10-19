@@ -18,6 +18,17 @@ python3 lm51770_calc.py --json result.json       # 全部結果，含 Bode / 效
 python3 -m unittest test_lm51770_calc -v         # 對 xlsm 驗證
 ```
 
+### VIN 滑桿（單點模式與 duty）
+
+HTML 最上方「基本參數與 VIN 工作點」：左邊是基本參數（與左側 Step 輸入同步），右邊拉 VIN 滑桿（範圍 VIN(min)~VIN(max)，也可直接輸入或按 min / nom / max），即時顯示：
+
+* 該 VIN 落在 **BUCK / BUCK-BOOST / BOOST** 哪一區，以及判斷依據（與哪個轉換電壓比較）
+* D Buck 臂（Q1 導通比）、D Boost 臂（Q4 導通比）、代入數值的 duty 公式
+* 模式區間圖（VIN 上升 / 下降兩條，標出四個轉換電壓與目前 VIN）
+* 三相位 t1 / t2 / t3 的時間、Q1~Q4 開關狀態、電感電流斜率與波形、估算效率
+
+Python 對應：`python3 lm51770_calc.py --vin 12 --vin 16 --vin 30`
+
 HTML 直接用瀏覽器開啟 `LM51770_calc.html`；輸入會存在瀏覽器 localStorage，「回復 xlsm 預設值」可重設，「匯出 JSON」可下載結果。
 
 ## 計算流程（同 Design Converter）

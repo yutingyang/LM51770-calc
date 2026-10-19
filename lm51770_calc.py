@@ -1161,6 +1161,35 @@ def report(d: Design, r: Dict) -> str:
     return "\n".join(L)
 
 
+def vin_report(d: Design, vin: float, model: str = "lm5177") -> str:
+    """單一 VIN 的模式判斷與 duty 計算過程 (對應 HTML 的 VIN 滑桿)."""
+    op = operating_point(d, vin, model=model)
+    tr = lm5177_transitions(d.fsw, d.vout, d.timing_device)
+    T = 1 / d.fsw
+    L = [f"VIN = {vin:.3f} V → {op['mode']}  (duty model = {model})"]
+    if model == "xlsm":
+        L.append(f"  判斷：xlsm 原始算法，VIN {'>' if vin > d.vout else '≤'} VOUT ({d.vout:g} V)")
+    elif not d.mode_fpwm:
+        L.append(f"  判斷：PSM，轉換點 = VOUT ({d.vout:g} V)")
+    else:
+        L.append(f"  轉換電壓：上升 Boost→BB {tr['vin_boost_to_bb']:.2f} V、BB→Buck "
+                 f"{tr['vin_bb_to_buck']:.2f} V；下降 Buck→BB {tr['vin_buck_to_bb']:.2f} V、"
+                 f"BB→Boost {tr['vin_bb_to_boost']:.2f} V（目前依 VIN {'下降' if d.vin_direction == 'falling' else '上升'}）")
+    if op["mode"] == "BUCK-BOOST":
+        L.append(f"  t1 (Q1+Q3) = T − (0.175·T + 2·tmin) = {op['t1'] * 1e9:.1f} ns  (tmin {tr['t_min_pulse'] * 1e9:.1f} ns)")
+        L.append(f"  t2 (Q1+Q4) = (VOUT·T − VIN·t1)/(VIN+VOUT) = {op['t2'] * 1e9:.1f} ns")
+        L.append(f"  t3 (Q2+Q3) = T − t1 − t2 = {op['t3'] * 1e9:.1f} ns")
+    L.append(f"  D_buck (Q1) = {op['d_buck_leg']:.4f}, D_boost (Q4) = {op['d_boost_leg']:.4f}, "
+             f"VOUT/VIN = {d.vout / vin:.4f}")
+    L.append(f"  IIN = {op['iin']:.3f} A, IL avg = {op['il_avg']:.3f} A, IL peak = {op['il_peak']:.3f} A, "
+             f"ΔIL = {op['ripple']:.3f} A, IL rms = {op['il_rms']:.3f} A")
+    L.append(f"  η (估算) = {losses(d, vin)['efficiency'] * 100:.2f} %")
+    for i, sg in enumerate(op["segments"], 1):
+        L.append(f"    t{i}: {sg['dt'] * 1e9:7.1f} ns ({sg['dt'] / T * 100:5.1f} %)  ON: {'+'.join(sg['on']):6s} "
+                 f"iL {sg['i_start']:.2f} → {sg['i_end']:.2f} A")
+    return "\n".join(L)
+
+
 def _apply_set(d: Design, items: List[str]) -> None:
     for it in items:
         key, val = it.split("=", 1)
@@ -1216,11 +1245,16 @@ def main(argv=None):
                     help="duty 模型 (預設 lm5177)")
     ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
                     help="修改輸入，如 vin_nom=20、q1.rdson=0.004 (SI 單位)")
+    ap.add_argument("--vin", type=float, action="append", metavar="V",
+                    help="只列出這個 VIN 的模式 (Buck / Buck-Boost / Boost) 與 duty，可重複")
     ap.add_argument("--json", metavar="FILE", help="輸出全部結果為 JSON")
     ap.add_argument("--plot", metavar="DIR", help="輸出 PNG 圖 (需要 matplotlib)")
     args = ap.parse_args(argv)
     d = Design()
     _apply_set(d, args.set)
+    if args.vin:
+        print("\n\n".join(vin_report(d, v, args.model) for v in args.vin))
+        return
     r = calculate(d, model=args.model)
     print(report(d, r))
     if args.json:
