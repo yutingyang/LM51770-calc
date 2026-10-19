@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LM51770 Buck-Boost Calculator</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1d2330; --muted: #5d6677; --line: #dde1e8;
+  --accent: #1f6feb; --accent-soft: #e8f0fe; --warn: #b42318; --warn-soft: #fdecea;
+  --ok: #067647; --grid: #e8ebf0;
+  --c1: #1f6feb; --c2: #d4570d; --c3: #0f8a5f; --c4: #8e44ad; --c5: #b58900; --c6: #c2185b;
+  --buck: #dcebff; --bb: #fff1d6; --boost: #e3f6ea;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1a1f27; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2c333f;
+    --accent: #6ea8ff; --accent-soft: #1c2a40; --warn: #ff8a80; --warn-soft: #3a1e1e;
+    --ok: #4cc38a; --grid: #262c36;
+    --c1: #6ea8ff; --c2: #ff9a57; --c3: #4cc38a; --c4: #c39bff; --c5: #e3c35a; --c6: #ff7aa8;
+    --buck: #1d2d45; --bb: #3a3020; --boost: #1d3a2a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1f27; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2c333f;
+  --accent: #6ea8ff; --accent-soft: #1c2a40; --warn: #ff8a80; --warn-soft: #3a1e1e;
+  --ok: #4cc38a; --grid: #262c36;
+  --c1: #6ea8ff; --c2: #ff9a57; --c3: #4cc38a; --c4: #c39bff; --c5: #e3c35a; --c6: #ff7aa8;
+  --buck: #1d2d45; --bb: #3a3020; --boost: #1d3a2a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+header { padding: 16px; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { margin: 0 0 4px; font-size: 20px; }
+header p { margin: 0; color: var(--muted); }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px; }
+.bar label { display: flex; gap: 6px; align-items: center; }
+select, input[type=number], button { font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 16px; padding: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; overflow-x: auto; }
+.inputs details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.inputs details:last-child { border-bottom: 0; }
+.inputs summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.field { display: grid; grid-template-columns: 1fr 96px 52px; gap: 6px; align-items: center; margin: 4px 0; }
+.field span.u { color: var(--muted); font-size: 12px; }
+.field input, .field select { width: 100%; }
+table { border-collapse: collapse; width: 100%; }
+td, th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mos td, .mos th { padding: 2px 3px; }
+.mos input { width: 100%; min-width: 0; padding: 2px 3px; }
+.results { display: grid; gap: 16px; min-width: 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+h3 { font-size: 14px; margin: 12px 0 6px; color: var(--muted); }
+.tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.tag.BUCK { background: var(--buck); } .tag.BOOST { background: var(--boost); } .tag.BUCK-BOOST { background: var(--bb); }
+.warn { color: var(--warn); font-weight: 600; }
+.ok { color: var(--ok); }
+.note { color: var(--muted); font-size: 12px; }
+.chart { width: 100%; overflow: hidden; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.kpi { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.kpi b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.kpi span { color: var(--muted); font-size: 12px; }
+.tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; display: none; z-index: 10; white-space: pre; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LM51770 四開關 Buck-Boost 計算工具</h1>
+  <p>由 <code>LM51770_Buck-Boost_Quickstart_Tool_V1_0_1.xlsm</code> 轉換。依 Design Converter 的 Step 1 – 8 計算功率級、補償與 Bode 圖；duty 預設依 LM5177 四開關時序（Buck / Buck-Boost / Boost 三區、三相位）計算。</p>
+  <div class="bar">
+    <label>Duty 模型
+      <select id="model">
+        <option value="lm5177">LM5177 時序（預設）</option>
+        <option value="xlsm">xlsm 原始（VIN&gt;VOUT 判斷）</option>
+      </select></label>
+    <label>轉換區遲滯
+      <select id="vin_direction">
+        <option value="rising">VIN 上升（同 xlsm 效率頁）</option>
+        <option value="falling">VIN 下降</option>
+      </select></label>
+    <label>主題
+      <select id="theme"><option value="">系統</option><option value="light">淺色</option><option value="dark">深色</option></select></label>
+    <button id="reset">回復 xlsm 預設值</button>
+    <button id="export" class="primary">匯出 JSON</button>
+  </div>
+</header>
+<main>
+  <section class="panel inputs" id="inputs"></section>
+  <section class="results" id="results"></section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script id="calc">
+/* ===== LM51770 calculation core (no DOM). Mirrors lm51770_calc.py ===== */
+"use strict";
+const PI = Math.PI;
+const DEVICES = {
+  LM51770:  { gm_imon: 1e-3, gm_il: 200e-6, gm_csa: 600e-6, vcs_min: 0.0425, vcs_typ: 0.050, vcs_max: 0.0575 },
+  LM517701: { gm_imon: 1e-3, gm_il: 200e-6, gm_csa: 600e-6, vcs_min: 0.065625, vcs_typ: 0.075, vcs_max: 0.084375 },
+};
+const TIMING_DEVICES = {
+  LM5177:  { I1: 115e-9, I2: 2, I3: 1, I4: 2, I5: 1 },
+  LM51772: { I1: 80e-9, I2: 4, I3: 1, I4: 2, I5: 1 },
+};
+const TON_MIN_TABLE = [[0.1, 435.3921], [0.1212, 404.8119], [0.1424, 379.0609], [0.1636, 355.5805], [0.1848, 334.3524], [0.2061, 315.6626], [0.2273, 299.4314], [0.2485, 283.9873], [0.2697, 270.1134], [0.2909, 257.7974], [0.3121, 246.5349], [0.3333, 236.0069], [0.3545, 226.2988], [0.3758, 217.5111], [0.397, 209.2128], [0.4182, 201.4597], [0.4394, 193.9455], [0.4606, 187.2546], [0.4818, 180.9858], [0.503, 175.1552], [0.5242, 169.5948], [0.5455, 164.3228], [0.5667, 159.3714], [0.5879, 154.7458], [0.6, 151.8441], [0.6091, 150.1909], [0.6303, 146.0382], [0.6515, 141.9745], [0.6727, 138.1506], [0.6939, 134.4471], [0.7152, 130.9936], [0.7364, 127.8038], [0.7576, 124.6821], [0.7788, 121.6017], [0.8, 118.6832], [0.8212, 115.9532], [0.8424, 113.2763], [0.8636, 110.4466], [0.8848, 108.4077], [0.9061, 105.8044], [0.9273, 103.5754], [0.9485, 101.3655], [0.9697, 99.1579], [0.9909, 97.0561], [1.0121, 95.115], [1.0333, 93.2483], [1.0545, 91.3776], [1.0758, 91.2921], [1.097, 91.2118], [1.1182, 91.1045], [1.1394, 91.0418], [1.1606, 90.7792], [1.1818, 90.677], [1.203, 90.6271], [1.2242, 90.4862], [1.2455, 90.2243], [1.2667, 90.2613], [1.2879, 90.1815], [1.3091, 89.9721], [1.3303, 89.7389], [1.3515, 89.6257], [1.3727, 89.5104], [1.3939, 89.3317], [1.4152, 89.3375], [1.4364, 89.2183], [1.4576, 89.145], [1.4788, 88.8905], [1.5, 88.917], [1.5212, 88.7541], [1.5424, 88.5991], [1.5636, 88.5257], [1.5848, 88.7184], [1.6061, 88.3713], [1.6273, 88.4202], [1.6485, 88.2529], [1.6697, 88.2802], [1.6909, 88.052], [1.7121, 88.0665], [1.7333, 88.0375], [1.7545, 87.7745], [1.7758, 87.7724], [1.797, 87.6184], [1.8182, 87.6316], [1.8394, 87.3767], [1.8606, 87.3151], [1.8818, 87.4674], [1.903, 87.2847], [1.9242, 87.1411], [1.9455, 87.1667], [1.9667, 86.794], [1.9879, 86.9755], [2.0091, 86.9146], [2.0303, 86.9184], [2.0515, 86.6816], [2.0727, 86.4207], [2.0939, 86.6138], [2.1152, 86.5314], [2.1364, 86.2811], [2.1576, 86.297], [2.1788, 86.4205], [2.2, 86.2333]];
+const XLSM_FREQS = [1, 1.0965, 1.2023, 1.3183, 1.4454, 1.5849, 1.7378, 1.9055, 2.0893, 2.2909, 2.5119, 2.7542, 3.02, 3.3113, 3.6308, 3.9811, 4.3652, 4.7863, 5.2481, 5.7544, 6.3096, 6.9183, 7.5858, 8.3176, 9.1201, 10, 10.965, 12.023, 13.183, 14.454, 15.849, 17.378, 19.055, 20.893, 22.909000000000002, 25.119, 27.542, 30.2, 33.113, 36.308, 39.811, 43.652, 47.863, 52.481, 57.544000000000004, 63.096, 69.183, 75.858, 83.176, 91.20100000000001, 100, 109.65, 120.23, 131.83, 144.54, 158.49, 173.78, 190.55, 208.93, 229.09, 251.19, 275.42, 302, 331.13, 363.08, 398.11, 436.52, 478.63, 524.81, 575.44, 630.96, 691.83, 758.58, 831.76, 912.01, 1000, 1096.5, 1202.3, 1318.3, 1445.4, 1584.9, 1737.8, 1905.5, 2089.3, 2290.9, 2511.9, 2754.2, 3020, 3311.3, 3630.8, 3981.1, 4365.2, 4786.3, 5248.1, 5370.3, 5432.85, 5495.4, 5559.4, 5623.4, 5688.9, 5754.4, 5821.4, 5888.4, 5957, 6025.6, 6095.8, 6166, 6237.8, 6309.6, 6383.05, 6456.5, 6531.7, 6606.9, 6683.85, 6760.8, 6839.55, 6918.3, 6998.9, 7079.5, 7161.95, 7244.4, 7328.75, 7413.1, 7499.45, 7585.8, 7674.15, 7762.5, 7852.9, 7943.3, 8035.8, 8128.3, 8222.95, 8270.275000000001, 8317.6, 8366.05, 8414.5, 8462.95, 8511.4, 8560.95, 8610.5, 8660.05, 8709.6, 8760.325, 8811.05, 8861.775, 8912.5, 8964.4, 9016.3, 9068.2, 9120.1, 9173.2, 9226.3, 9279.4, 9332.5, 9386.85, 9441.2, 9495.55, 9549.9, 9605.525, 9661.15, 9716.775, 9772.4, 9829.3, 9886.2, 9943.1, 10000, 10058.25, 10116.5, 10174.75, 10233, 10292.5, 10352, 10411.5, 10471, 10532, 10593, 10654, 10715, 10777.5, 10840, 10902.5, 10965, 11028.75, 11092.5, 11156.25, 11220, 11285.5, 11351, 11416.5, 11482, 11548.75, 11615.5, 11682.25, 11749, 11817.5, 11886, 11954.5, 12023, 12093, 12163, 12233, 12303, 12374.5, 12446, 12517.5, 12589, 12662.25, 12735.5, 12808.75, 12882, 12957.25, 13032.5, 13107.75, 13183, 13259.75, 13336.5, 13413.25, 13490, 13568.5, 13647, 13725.5, 13804, 13884.25, 13964.5, 14044.75, 14125, 14207.25, 14289.5, 14371.75, 14454, 14622.5, 14706.75, 14791, 14877.25, 14963.5, 15049.75, 15136, 15224, 15312, 15400, 15488, 15578.25, 15668.5, 15758.75, 15849, 15941.25, 16033.5, 16125.75, 16218, 16312.5, 16407, 16501.5, 16596, 16692.5, 16789, 16885.5, 16982, 17081, 17180, 17279, 17378, 17479.25, 17580.5, 17681.75, 17783, 17886.5, 17990, 18093.5, 18197, 18303, 18409, 18515, 18621, 18729.5, 18838, 18946.5, 19055, 19165.75, 19276.5, 19387.25, 19498, 19611.75, 19725.5, 19839.25, 19953, 20069, 20185, 20301, 20417, 20536, 20655, 20774, 20893, 21014.75, 21136.5, 21258.25, 21380, 21504.5, 21629, 21753.5, 21878, 22005.25, 22132.5, 22259.75, 22387, 22517.5, 22648, 22778.5, 22909, 23042.25, 23175.5, 23308.75, 23442, 23578.5, 23715, 23851.5, 23988, 24127.75, 24267.5, 24407.25, 24547, 24690, 24833, 24976, 25119, 25265.25, 25411.5, 25557.75, 25704, 25853.75, 26003.5, 26153.25, 26303, 26456, 26609, 26762, 26915, 27071.75, 27228.5, 27385.25, 27542, 27702.5, 27863, 28023.5, 28184, 28348, 28512, 28676, 28840, 29008, 29176, 29344, 29512, 29684, 29856, 30028, 30200, 30375.75, 30551.5, 30727.25, 30903, 31083, 31263, 31443, 31623, 31807, 31991, 32175, 32359, 32547.5, 32736, 32924.5, 33113, 33305.75, 33498.5, 33691.25, 33884, 34081.5, 34279, 34476.5, 34674, 34875.75, 35077.5, 35279.25, 35481, 35687.75, 35894.5, 36101.25, 36308, 36519.5, 36731, 36942.5, 37154, 37370.25, 37586.5, 37802.75, 38019, 38240.5, 38462, 38683.5, 38905, 39131.5, 39358, 39584.5, 39811, 40042.75, 40274.5, 40506.25, 40738, 40975.25, 41212.5, 41449.75, 41687, 41929.75, 42172.5, 42415.25, 42658, 42906.5, 43155, 43403.5, 43652, 43906, 44160, 44414, 44668, 44928.25, 45188.5, 45448.75, 45709, 45975.25, 46241.5, 46507.75, 46774, 47046.25, 47318.5, 47590.75, 47863, 48141.75, 48420.5, 48699.25, 48978, 49263.25, 49548.5, 49833.75, 50119, 50410.75, 50702.5, 50994.25, 51286, 51584.75, 51883.5, 52182.25, 52481, 52786.5, 53092, 53397.5, 53703, 54015.75, 54328.5, 54641.25, 54954, 55274, 55594, 55914, 56234, 56561.5, 56889, 57216.5, 57544, 57879, 58214, 58549, 58884, 59227, 59570, 59913, 60256, 60607, 60958, 61309, 61660, 62019, 62378, 62737, 63096, 63463.25, 63830.5, 64197.75, 64565, 64941, 65317, 65693, 66069, 66453.75, 66838.5, 67223.25, 67608, 68001.75, 68395.5, 68789.25, 69183, 69586, 69989, 70392, 70795, 71207.25, 71619.5, 72031.75, 72444, 72865.75, 73287.5, 73709.25, 74131, 74562.75, 74994.5, 75426.25, 75858, 76299.75, 76741.5, 77183.25, 77625, 78077, 78529, 78981, 79433, 79895.5, 80358, 80820.5, 81283, 81756.25, 82229.5, 82702.75, 83176, 83660.5, 84145, 84629.5, 85114, 85609.5, 86105, 86600.5, 87096, 87603.25, 88110.5, 88617.75, 89125, 89644, 90163, 90682, 91201, 91732, 92263, 92794, 93325, 93868.5, 94412, 94955.5, 95499, 96611.5, 97724, 98862, 100000, 101165, 102330, 103520, 104710, 105930, 107150, 108400, 109650, 110925, 112200, 113510, 114820, 116155, 117490, 118860, 120230, 126030, 131830, 144540, 158490, 173780, 190550, 208930, 229090, 251190, 275420, 302000, 331130, 363080, 398110, 436520, 478630, 524810, 575440, 630960, 691830, 758580, 831760, 912010, 1000000];
+const RCFG_TABLE = [0, 0.511, 1.15, 1.9, 2.7, 3.8, 5.1, 6.5, 8.3, 10.5, 13.3, 16.2, 20.5, 24.9, 30.1, 36.5];
+const E12_BASE = [1.0, 1.2, 1.5, 1.8, 2.2, 2.7, 3.3, 3.9, 4.7, 5.6, 6.8, 8.2];
+const CONST = {
+  vref: 1.0, ifb: 60e-9, iss: 10e-6, vuvlo_on: 1.28, vuvlo_off: 1.17, iuvlo: 6e-6,
+  iout_threshold: 0.050, csamp_gain: 10.0, gm_ea: 600e-6,
+  cslope: 2.5e-12, gm_slopecomp: 20e-9 * 125000 * 0.75, isc_const: 0.0,
+  gbw: 13e6, roea: 10e6, gbw_il: 2e6, roea_il: 20e6, cc2il: 1e-15,
+  r_cs: 10.0, r_v2i_ipeak: 25000.0,
+  ta: 25.0, ltc: 0.004, theta_ca: 20.0, vdd: 7.5,
+  rdrv_up: 1.5, rdrv_dn: 1.0, deadtime: 50e-9, iq: 3e-3, rdson_tc_top: 0.004, rdson_tc_bot: 0.004,
+};
+
+function defaultMosfet(o) {
+  return Object.assign({ rdson: 3.5e-3, qg: 67e-9, qgd: 10.31e-9, qgs: 11.25e-9, rg: 0.63, gfs: 117.0,
+    vth: 2.0, vsd: 0.75, qrr: 0.0, theta_ja: 65.0 }, o || {});
+}
+function defaultDesign() {
+  return {
+    device: "LM51770", vin_min: 6.0, vin_nom: 12.0, vin_max: 36.0, vout: 16.0, iout: 8.0, fsw: 398e3,
+    efficiency: 0.95, mode_fpwm: true,
+    lf: 1.8e-6, rdcr: 3.2e-3,
+    ilimit_margin: 20.0, rs: 1.3e-3, rslope: null, rs_calc_mode: 1,
+    vout_ripple: 0.150, cout: 130e-6, cout_esr: 2e-3,
+    vin_ripple: 0.180, cin: 100e-6, cin_esr: 2e-3,
+    tss: 1.8e-3, vin_uvlo_on: 4.6, vin_uvlo_off: 4.025,
+    cfg_drss: 1, cfg_hiccup: 2, cfg_psm: 1, cfg_imon_lim: 3, current_setpoint: 5.0,
+    fcross: 4e3, rfbt: 71.5e3, rcomp: null, ccomp: null, chf: null,
+    cimon: 2.2e-9, rimon: 700.0,
+    q1: defaultMosfet(), q2: defaultMosfet({ qrr: 45e-9 }), q3: defaultMosfet({ qrr: 56e-9 }), q4: defaultMosfet(),
+    vf_schottky_buck: 0.0, qrr_schottky_buck: 0.0, vf_schottky_boost: 0.0, qrr_schottky_boost: 0.0,
+    timing_device: "LM5177", vin_direction: "rising",
+  };
+}
+
+/* Python round(): banker's rounding */
+function pyRound(x) {
+  const r = Math.round(x);
+  return (Math.abs(x % 1) === 0.5 && r % 2 !== 0) ? r - 1 : r;
+}
+function e96(x) {
+  if (x == null || !(x > 0)) return x;
+  const lg = Math.log10(x), dec = Math.floor(lg), frac = lg - dec;
+  let n = pyRound(96 * frac);
+  if (96 * frac - n < 0) n -= 1;
+  const scale = Math.pow(10, dec - 2);
+  const lo = Math.trunc(0.5 + 100 * Math.pow(10, n / 96)) * scale;
+  const hi = Math.trunc(0.5 + 100 * Math.pow(10, (n + 1) / 96)) * scale;
+  return x > (lo + hi) / 2 ? hi : lo;
+}
+function e12(x) {
+  if (x == null || !(x > 0)) return x;
+  const dec = Math.floor(Math.log10(x));
+  let best = null;
+  for (const d of [dec - 1, dec, dec + 1]) for (const b of E12_BASE) {
+    const c = b * Math.pow(10, d);
+    if (best === null || Math.abs(c - x) < Math.abs(best - x)) best = c;
+  }
+  return best;
+}
+function tonMinBoost(fsw) {
+  const f = fsw / 1e6;
+  let val = TON_MIN_TABLE[0][1];
+  for (const [fm, t] of TON_MIN_TABLE) { if (fm <= f) val = t; else break; }
+  return val * 1e-9;
+}
+
+/* ---------- LM5177 timing / duty model (Timings sheet) ---------- */
+function lm5177Transitions(fsw, vout, timingDevice, il) {
+  il = il || 0;
+  const p = TIMING_DEVICES[timingDevice || "LM5177"];
+  const T = 1 / fsw;
+  const J1 = 0, J2 = 0, J3 = 1e-6, J4 = 1e-6;
+  const J5 = il > 0 ? 1 : 0, J6 = il < 0 ? 1 : 0, J7 = J5 - J6;
+  const L1 = p.I1, L3 = 0.225 - p.I2 * 0.025, L4 = 0.75 + p.I3 * 0.25;
+  const L5 = 1 - p.I4 * 0.0416666, L6 = 0.75 + p.I5 * 0.25;
+  const B3 = fsw / 1000;
+  const N1 = 0.75 / L1 * J3 / 2e6 * 0.2;
+  const N2 = Math.min(J3 / 2e6 * B3 * 1000 * L5 + J4 * (1 - L5), N1);
+  const N4 = L3 / B3 * 0.001;
+  const N5 = L4 * 75e-9 / N2 * 1e-6;
+  const N6 = N4 + 2 * N5;
+  const P3 = N5 + J7 * J1, P4 = T - P3, R2 = N5 - J7 * J1;
+  const T2 = Math.max(Math.max(0.5 * N5 / L4 * L6, J6 * J2) - J7 * J1, 0);
+  const T3 = Math.max(0.5 * N5 / L4 * L6, J5 * J2);
+  const T5 = N4 + 2 * N5, T4 = Math.max(T5 - T3 - J7 * J1, 0), T6 = T - T5;
+  return {
+    vin_buck_to_bb: vout / (P4 * fsw),
+    vin_bb_to_buck: vout * ((T - T2) / (T6 + T2)),
+    vin_boost_to_bb: vout * (1 - R2 * fsw),
+    vin_bb_to_boost: vout * ((T - T4) / (T6 + T4)),
+    t_min_pulse: N5, t_bb_window: T5, t1_bb: T6, N4, N5, N6, T2, T4,
+  };
+}
+function modeLm5177(vin, vout, tr, fpwm, direction) {
+  if (!fpwm) return vin > vout ? "BUCK" : "BOOST";
+  if (direction === "falling") {
+    if (vin > tr.vin_buck_to_bb) return "BUCK";
+    if (vin <= tr.vin_bb_to_boost) return "BOOST";
+    return "BUCK-BOOST";
+  }
+  if (vin > tr.vin_bb_to_buck) return "BUCK";
+  if (vin <= tr.vin_boost_to_bb) return "BOOST";
+  return "BUCK-BOOST";
+}
+const segRms2 = (dt, a, b) => dt * (a * b + (a - b) * (a - b) / 3);
+const segInt = (dt, a, b) => dt * (a + b) / 2;
+
+function operatingPoint(d, vin, iout, model) {
+  iout = iout == null ? d.iout : iout;
+  model = model || "lm5177";
+  const vout = d.vout, fsw = d.fsw, L = d.lf, T = 1 / fsw;
+  const iin = vout * iout / (vin * d.efficiency);
+  const tr = lm5177Transitions(fsw, vout, d.timing_device);
+  let mode, D = null;
+  if (model === "xlsm") {
+    if (vin > vout) { mode = "BUCK"; D = (vout + iout * (d.rdcr + d.rs)) / (vin + iout * d.rs); }
+    else { mode = "BOOST"; D = (vout - vin + iin * d.rdcr) / (vout - iin * d.rs); }
+  } else {
+    mode = modeLm5177(vin, vout, tr, d.mode_fpwm, d.vin_direction);
+    const r1 = d.q1.rdson, r2 = d.q2.rdson, r3 = d.q3.rdson, r4 = d.q4.rdson;
+    if (mode === "BUCK") D = (vout + (r2 + d.rs + d.rdcr) * iout) / (vin + (d.rs + r2 - r1) * iout);
+    else if (mode === "BOOST") D = (vout + (r3 + d.rdcr) * iin - vin) / (vout + (r3 - r4 - d.rs) * iin);
+  }
+  if (D !== null) D = Math.min(Math.max(D, 0), 1);
+  let t1, t2, t3, segs, dBuck, dBoost;
+  if (mode === "BUCK") {
+    t1 = D * T; t2 = T - t1; t3 = 0;
+    const a1 = (vin - vout) / L;
+    const i0 = iout - 0.5 * a1 * t1, i1 = i0 + a1 * t1;
+    segs = [[t1, i0, i1, ["Q1", "Q3"]], [t2, i1, i0, ["Q2", "Q3"]]];
+    dBuck = D; dBoost = 0;
+  } else if (mode === "BOOST") {
+    t1 = D * T; t2 = T - t1; t3 = 0;
+    const a1 = vin / L;
+    const i0 = iin - 0.5 * a1 * t1, i1 = i0 + a1 * t1;
+    segs = [[t1, i0, i1, ["Q1", "Q4"]], [t2, i1, i0, ["Q1", "Q3"]]];
+    dBuck = 1; dBoost = D;
+  } else {
+    t1 = Math.min(tr.t1_bb, T);
+    t2 = Math.max((vout * T - vin * t1) / (vin + vout), 0);
+    t3 = Math.max(T - t1 - t2, 0);
+    const a1 = (vin - vout) / L, a2 = vin / L;
+    const i0 = (iin * T - (0.5 * a1 * t1 * t1 + a1 * t1 * t2 + 0.5 * a2 * t2 * t2)) / (t1 + t2);
+    const i1 = i0 + a1 * t1, i2 = i1 + a2 * t2;
+    segs = [[t1, i0, i1, ["Q1", "Q3"]], [t2, i1, i2, ["Q1", "Q4"]], [t3, i2, i0, ["Q2", "Q3"]]];
+    dBuck = (t1 + t2) / T; dBoost = t2 / T; D = dBoost;
+  }
+  const pts = segs.flatMap(s => [s[1], s[2]]);
+  const ilMax = Math.max(...pts), ilMin = Math.min(...pts);
+  const sum = (f, filt) => segs.filter(filt || (() => true)).reduce((a, s) => a + f(s[0], s[1], s[2]), 0);
+  const ilAvg = sum(segInt) / T, ilRms = Math.sqrt(sum(segRms2) / T);
+  const rmsOf = q => Math.sqrt(sum(segRms2, s => s[3].includes(q)) / T);
+  const avgOf = q => sum(segInt, s => s[3].includes(q)) / T;
+  const irms = { Q1: rmsOf("Q1"), Q2: rmsOf("Q2"), Q3: rmsOf("Q3"), Q4: rmsOf("Q4") };
+  const iInAvg = avgOf("Q1"), iOutAvg = avgOf("Q3");
+  return {
+    vin, iout, iin, mode, model, duty: D, d_buck_leg: dBuck, d_boost_leg: dBoost, t1, t2, t3,
+    segments: segs.map(s => ({ dt: s[0], i_start: s[1], i_end: s[2], on: s[3] })),
+    ripple: ilMax - ilMin, il_peak: ilMax, il_valley: ilMin, il_avg: ilAvg, il_rms: ilRms, irms,
+    irs_rms: Math.sqrt(irms.Q2 ** 2 + irms.Q4 ** 2), i_in_avg: iInAvg, i_out_avg: iOutAvg,
+    icin_rms: Math.sqrt(Math.max(irms.Q1 ** 2 - iInAvg ** 2, 0)),
+    icout_rms: Math.sqrt(Math.max(irms.Q3 ** 2 - iOutAvg ** 2, 0)),
+  };
+}
+
+/* ---------- Bode ---------- */
+function freqGrid(nPerDec, fmin, fmax) {
+  nPerDec = nPerDec || 200; fmin = fmin || 1; fmax = fmax || 1e6;
+  const n = Math.round(Math.log10(fmax / fmin) * nPerDec), out = [];
+  for (let k = 0; k <= n; k++) out.push(fmin * Math.pow(10, k / nPerDec));
+  return out;
+}
+function crossover(f, g, ph, interp) {
+  for (let k = 0; k < f.length - 1; k++) {
+    if (g[k] > 0 && g[k + 1] <= 0) {
+      if (!interp) return [f[k], ph[k]];
+      const x = g[k] / (g[k] - g[k + 1]);
+      const lf = Math.log10(f[k]) + x * (Math.log10(f[k + 1]) - Math.log10(f[k]));
+      return [Math.pow(10, lf), ph[k] + x * (ph[k + 1] - ph[k])];
+    }
+  }
+  return [null, null];
+}
+function voltageLoopBode(p, freqs, interp) {
+  const o = { f: freqs, gain: [], phase: [], ea_gain: [], ea_phase: [], plant_gain: [], plant_phase: [] };
+  const fn = p.f_sample, pterm1 = p.Q * fn, pterm2 = fn * fn + 0.01;
+  for (const f of freqs) {
+    const C = Math.hypot(1, f / p.f_load), Dp = Math.atan(f / p.f_load);
+    const E = Math.hypot(1, f / p.f_esr), F = Math.atan(f / p.f_esr);
+    const G = p.rhp ? Math.hypot(1, f / p.f_rhp) : 1, H = p.rhp ? -Math.atan(f / p.f_rhp) : 0;
+    const I = Math.hypot(1, f / p.fp_ea), J = Math.atan(f / p.fp_ea);
+    const K = Math.hypot(1, f / p.fz_comp), Lz = Math.atan(f / p.fz_comp);
+    const M = Math.hypot(1, f / p.fp_comp), N = Math.atan(f / p.fp_comp);
+    const re = 1 - f * f / pterm2, im = f / pterm1;
+    const U = Math.hypot(re, im), V = Math.atan2(im, re);
+    o.gain.push(20 * Math.log10(E * K * G / (C * I * U * M) * p.adc));
+    o.phase.push(((F + Lz + H) - (Dp + J + V + N)) * 180 / PI);
+    o.ea_gain.push(20 * Math.log10(K / (I * M) * p.aea));
+    o.ea_phase.push((Lz - (J + N)) * 180 / PI);
+    o.plant_gain.push(20 * Math.log10(E * G / (C * U) * p.acs * p.am));
+    o.plant_phase.push((F + H - (Dp + V)) * 180 / PI);
+  }
+  const [fc, ph] = crossover(freqs, o.gain, o.phase, interp);
+  o.fc = fc; o.pm = ph === null ? null : 180 + ph;
+  o.fc_ea = crossover(freqs, o.ea_gain, o.ea_phase, interp)[0];
+  return o;
+}
+/* minimal complex arithmetic */
+const cx = (re, im) => ({ re, im: im || 0 });
+const cadd = (a, b) => cx(a.re + b.re, a.im + b.im);
+const csub = (a, b) => cx(a.re - b.re, a.im - b.im);
+const cmul = (a, b) => cx(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+const cdiv = (a, b) => { const m = b.re * b.re + b.im * b.im; return cx((a.re * b.re + a.im * b.im) / m, (a.im * b.re - a.re * b.im) / m); };
+const cabs = a => Math.hypot(a.re, a.im);
+const carg = a => Math.atan2(a.im, a.re);
+const cs = x => cx(x, 0);
+
+function currentLimitBode(d, p, freqs, interp) {
+  const vin = p.vin, vout = d.vout, fsw = d.fsw, L = d.lf, iload = d.current_setpoint;
+  const rload = d.vout / d.iout, co2 = d.cout / 2, co1 = d.cout - co2, esr = d.cout_esr;
+  const duty = p.duty_il, rsns = p.rshunt, dev = DEVICES[d.device];
+  const iSnsGain = d.rs * dev.gm_csa * CONST.r_v2i_ipeak;
+  let sn, se;
+  if (vin >= vout) { const vse = Math.max(vout, vin / 2); sn = iSnsGain * (vin - vout) / L; se = iSnsGain * vse / L; }
+  else { sn = iSnsGain * vin / L; se = iSnsGain * (vout - vin) / L; }
+  const fm = fsw / (sn + se);
+  const ail = dev.gm_il * CONST.roea_il;
+  const ilZ1 = 1 / (2 * PI * d.rimon * d.cimon);
+  const ilP1 = 1 / (2 * PI * (CONST.roea_il + d.rimon) * d.cimon);
+  const cbwIl = dev.gm_il / (2 * PI * CONST.gbw_il);
+  const ilP2 = 1 / (2 * PI * d.rimon * (CONST.cc2il + cbwIl));
+  const o = { f: freqs, gain: [], phase: [], amp_gain: [], amp_phase: [], plant_gain: [], plant_phase: [] };
+  const one = cs(1);
+  for (const f of freqs) {
+    const w = 2 * PI * f;
+    const zl = cx(0, w * L);
+    const zco1 = cadd(cs(esr), cdiv(one, cx(0, w * co1)));
+    const zco2 = cadd(cs(esr), cdiv(one, cx(0, w * co2)));
+    const zout = cdiv(one, cadd(cs(1 / rload), cdiv(one, zco2)));
+    const zoutSns = cadd(zout, cs(rsns));
+    const zall = cdiv(one, cadd(cdiv(one, zco1), cdiv(one, cadd(cs(rsns), zout))));
+    const jw2 = cx(0, w / (fsw * PI));
+    const he = cadd(cadd(one, cx(0, w / (fsw * PI * (-2) / PI))), cmul(jw2, jw2));
+    let gdil, gx;
+    if (vin >= vout) { gdil = cdiv(cs(vin), cadd(zl, zall)); gx = gdil; }
+    else {
+      gdil = cdiv(cadd(cs(vout), cmul(zall, cs(iload))), cadd(zl, cmul(zall, cs((1 - duty) ** 2))));
+      gx = csub(cmul(gdil, cs(1 - duty)), cs(iload / (1 - duty)));
+    }
+    const gdisns = cdiv(gx, cmul(zoutSns, cadd(cdiv(one, zco1), cdiv(one, zoutSns))));
+    const ti = cmul(cmul(gdil, cs(iSnsGain)), cmul(he, cs(fm)));
+    const gvc = cdiv(cmul(cs(fm), gdisns), cadd(one, ti));
+    const amp = cmul(cs(ail), cdiv(cx(1, f / ilZ1), cmul(cx(1, f / ilP1), cx(1, f / ilP2))));
+    const loop = cmul(cmul(gvc, amp), cs(rsns));
+    const ra = cmul(cs(rsns), amp);
+    o.gain.push(20 * Math.log10(cabs(loop))); o.phase.push(carg(loop) * 180 / PI);
+    o.amp_gain.push(20 * Math.log10(cabs(ra))); o.amp_phase.push(carg(ra) * 180 / PI);
+    o.plant_gain.push(20 * Math.log10(cabs(gvc))); o.plant_phase.push(carg(gvc) * 180 / PI);
+  }
+  const [fc, ph] = crossover(freqs, o.gain, o.phase, interp);
+  o.fc = fc; o.pm = ph === null ? null : (ph > 0 ? ph - 180 : ph + 180);
+  Object.assign(o, { il_zero: ilZ1, il_pole1: ilP1, il_pole2: ilP2, fm, i_sns_gain: iSnsGain, sn, se });
+  return o;
+}
+
+/* ---------- Efficiency ---------- */
+const selfHeat = (p, tc, th, extra) => ((extra || 0) + p * (1 + tc * (CONST.ta - 25))) / (1 - p * tc * th);
+function rshuntOf(d) { return d.current_setpoint ? CONST.iout_threshold / d.current_setpoint : 0; }
+
+function losses(d, vin, iout, xlsmCompat) {
+  const c = CONST;
+  const op = operatingPoint(d, vin, iout, "lm5177");
+  iout = op.iout;
+  const iin = op.iin, vout = d.vout, fsw = d.fsw, mode = op.mode, dI = op.ripple;
+  const { q1, q2, q3, q4 } = d, dt = c.deadtime;
+  const iinNom = vout * d.iout / (d.vin_nom * d.efficiency);
+  const vsp1 = q1.vth + d.iout / q1.gfs, vsp4 = q4.vth + iinNom / q4.gfs;
+  const trBuck = (q1.qgd + q1.qgs / 2) * (c.rdrv_up + q1.rg) / (c.vdd - vsp1);
+  const tfBuck = (q1.qgd + q1.qgs / 2) * (c.rdrv_dn + q1.rg) / vsp1;
+  const trBoost = (q4.qgd + q4.qgs / 2) * (c.rdrv_up + q4.rg) / (c.vdd - vsp4);
+  const tfBoost = (q4.qgd + q4.qgs / 2) * (c.rdrv_dn + q4.rg) / vsp4;
+  const irmsL = op.il_rms;
+  const pDcr = irmsL ** 2 * d.rdcr * (1 + c.ltc * (c.ta - 25)) / (1 - irmsL ** 2 * d.rdcr * c.ltc * c.theta_ca);
+  const pCore = Math.abs(7.759e-3 * Math.pow(fsw, 0.9458) * Math.pow(0.00787 * dI, 2.304));
+  let icout = op.icout_rms, icin = op.icin_rms;
+  if (xlsmCompat) {
+    let dT, dU;
+    if (mode === "BUCK") { dT = op.duty; dU = 0; }
+    else if (mode === "BOOST") { dT = 1; dU = op.duty; }
+    else { dT = Math.min(1, fsw * op.t2 + op.t1); dU = Math.min(1, fsw * op.t1 + op.t3); }
+    const ac = Math.sqrt(iout ** 2 + dI ** 2 / 12);
+    icout = vin > vout ? dI / Math.sqrt(12) : Math.sqrt(dU / (1 - dU)) * ac;
+    icin = vin > vout ? Math.sqrt(dT * (1 - dT)) * ac : dI / Math.sqrt(12);
+  }
+  const pCout = d.cout_esr * icout ** 2, pCin = d.cin_esr * icin ** 2;
+  const ir = op.irms;
+  const pQ1c = q1.rdson * ir.Q1 ** 2;
+  let pQ1sw = 0;
+  if (mode === "BUCK") pQ1sw = vin * iout / 2 * fsw * (trBuck + tfBuck);
+  else if (mode === "BUCK-BOOST") {
+    let ilAvg = op.il_avg;
+    if (xlsmCompat) { const s = op.segments; ilAvg = fsw * (s[0].i_start * op.t1 + s[1].i_start * op.t2 + s[2].i_start * op.t3); }
+    pQ1sw = vin * ilAvg / 2 * fsw * (trBuck + tfBuck);
+  }
+  const pQ1dt = (vin > vout && iout <= dI / 2) ? Math.abs(iout - dI / 2) * q1.vsd * dt * fsw : 0;
+  const pQ1 = selfHeat(pQ1c, c.rdson_tc_top, q1.theta_ja, pQ1dt + pQ1sw);
+  const vsd2 = d.vf_schottky_buck > 0 ? 0 : q2.vsd;
+  const pQ2c = q2.rdson * ir.Q2 ** 2;
+  const pQ2dt = mode === "BOOST" ? 0 : (iout < dI / 2 ? dt * fsw * vsd2 * (iout + dI / 2) : 2 * dt * fsw * vsd2 * iout);
+  const pQ2 = selfHeat(pQ2c, c.rdson_tc_bot, q2.theta_ja, pQ2dt);
+  const pQ4c = q4.rdson * ir.Q4 ** 2;
+  const pQ4sw = mode === "BUCK" ? 0 : (mode === "BOOST" ? vout * iin / 2 * fsw * (trBoost + tfBoost) : vout * iout / 2 * fsw * (trBoost + tfBoost));
+  const pQ4dt = (vin <= vout && iin <= dI / 2) ? Math.abs(iin - dI / 2) * q4.vsd * dt * fsw : 0;
+  const pQ4 = selfHeat(pQ4c, c.rdson_tc_top, q4.theta_ja, pQ4dt + pQ4sw);
+  const vsd3 = d.vf_schottky_boost > 0 ? 0 : q3.vsd;
+  const pQ3c = q3.rdson * ir.Q3 ** 2;
+  const pQ3dt = mode === "BUCK" ? 0 : (iin < dI / 2 ? dt * fsw * vsd3 * (iin + dI / 2) : 2 * dt * fsw * vsd3 * iin);
+  const pQ3 = selfHeat(pQ3c, c.rdson_tc_bot, q3.theta_ja, pQ3dt);
+  let pExt = 0;
+  if (mode !== "BOOST") pExt += 2 * dt * fsw * d.vf_schottky_buck * iout;
+  if (mode !== "BUCK") pExt += 2 * dt * fsw * d.vf_schottky_boost * iin;
+  const qrr2 = d.qrr_schottky_buck > 0 ? d.qrr_schottky_buck : q2.qrr;
+  const qrr3 = d.qrr_schottky_boost > 0 ? d.qrr_schottky_boost : q3.qrr;
+  let pRrBuck = mode !== "BOOST" ? qrr2 * fsw * (vin - iout * q1.rdson) : 0;
+  let pRrBoost = mode !== "BUCK" ? qrr3 * fsw * vout : 0;
+  if (xlsmCompat && mode === "BUCK-BOOST") { pRrBuck = pRrBoost = pRrBuck + pRrBoost; }
+  const pRs = d.rs * op.irs_rms ** 2;
+  const pShunt = (d.cfg_imon_lim > 1 || xlsmCompat) ? rshuntOf(d) * iout ** 2 : 0;
+  const vsup = vout > 8 ? vout : vin;
+  const qg = mode === "BUCK" ? q1.qg + q2.qg : (mode === "BOOST" ? q3.qg + q4.qg : q1.qg + q2.qg + q3.qg + q4.qg);
+  const pIc = c.iq * vsup + qg * fsw * vsup;
+  const items = { inductor: pDcr + pCore, inductor_dcr: pDcr, inductor_core: pCore, cout: pCout, cin: pCin,
+    q1: pQ1, q2: pQ2, q3: pQ3, q4: pQ4, ext_diode: pExt, rr_buck: pRrBuck, rr_boost: pRrBoost,
+    rs: pRs, shunt: pShunt, ic: pIc };
+  let total = 0;
+  for (const k in items) if (k !== "inductor_dcr" && k !== "inductor_core") total += items[k];
+  const pout = vout * iout;
+  return { op, losses: items, total_loss: total, pout, efficiency: pout > 0 ? pout / (pout + total) : 0,
+    tr_buck: trBuck, tf_buck: tfBuck, tr_boost: trBoost, tf_boost: tfBoost };
+}
+function effTable(xs, rows, xname) {
+  const m = f => rows.map(f);
+  return { [xname]: xs, mode: m(r => r.op.mode), efficiency: m(r => r.efficiency * 100), total_loss: m(r => r.total_loss),
+    inductor: m(r => r.losses.inductor), buck_ctrl: m(r => r.losses.q1 + 0.66 * r.losses.rr_buck),
+    buck_sync: m(r => r.losses.q2 + 0.33 * r.losses.rr_buck), boost_ctrl: m(r => r.losses.q4 + 0.66 * r.losses.rr_boost),
+    boost_sync: m(r => r.losses.q3 + 0.33 * r.losses.rr_boost), rs: m(r => r.losses.rs),
+    duty_buck_leg: m(r => r.op.d_buck_leg), duty_boost_leg: m(r => r.op.d_boost_leg), ripple: m(r => r.op.ripple) };
+}
+function efficiencyVsVin(d, steps, xlsmCompat) {
+  steps = steps || 200;
+  const xs = []; for (let k = 0; k <= steps; k++) xs.push(d.vin_min + (d.vin_max - d.vin_min) * k / steps);
+  return effTable(xs, xs.map(v => losses(d, v, null, xlsmCompat)), "vin");
+}
+function efficiencyVsLoad(d, steps, vin) {
+  steps = steps || 100; vin = vin == null ? d.vin_nom : vin;
+  const xs = []; for (let k = 1; k <= steps; k++) xs.push(d.iout * k / steps);
+  return effTable(xs, xs.map(i => losses(d, vin, i)), "iout");
+}
+
+/* ---------- Design Converter Step 1 - 8 ---------- */
+function calculate(d, model, nPerDec, withCurves) {
+  model = model || "lm5177"; nPerDec = nPerDec || 200; withCurves = withCurves !== false;
+  const c = CONST, dev = DEVICES[d.device];
+  const vout = d.vout, iout = d.iout, fsw = d.fsw, L = d.lf, rs = d.rs;
+  const res = { model };
+  const rout = vout / iout, pout = vout * iout, pin = pout / d.efficiency;
+  const rtIdeal = (1 / fsw - 20e-9) * 30.3e9, rt = e96(rtIdeal);
+  let tr = lm5177Transitions(fsw, vout, d.timing_device);
+  if (!d.mode_fpwm) tr = Object.assign({}, tr, { vin_buck_to_bb: vout, vin_bb_to_buck: vout, vin_boost_to_bb: vout, vin_bb_to_boost: vout });
+  res.step1 = { rout, pout, pin, iin_min: pin / d.vin_min, iin_nom: pin / d.vin_nom, iin_max: pin / d.vin_max,
+    rt_ideal: rtIdeal, rt: rt / 1000 > 288 ? null : rt, transitions: tr };
+  const ops = { min: operatingPoint(d, d.vin_min, null, model), nom: operatingPoint(d, d.vin_nom, null, model),
+    max: operatingPoint(d, d.vin_max, null, model) };
+  res.operating_points = ops;
+  const K3 = ["min", "nom", "max"];
+  const mapK = f => Object.fromEntries(K3.map(k => [k, f(ops[k], k)]));
+
+  // Step 2
+  const dIdealMin = d.vin_min <= vout ? (vout - d.vin_min) / vout : vout / d.vin_min;
+  const lopt = d.vin_min < vout ? d.vin_min ** 2 * (vout - d.vin_min) / (0.2 * iout * fsw * vout ** 2)
+    : (d.vin_max - vout) * vout / (0.2 * iout * fsw * d.vin_max);
+  const lmin = Math.max(10 * vout * rs / fsw, rs / 8000), lmax = Math.min(rs * 35 * vout / fsw, rs / 100);
+  const tonMin = tonMinBoost(fsw), cCs = tonMin / (2 * PI * (2 * c.r_cs) * 10);
+  res.step2 = { lopt, lmin, lmax, l_recommended: Math.max(Math.min(lopt, lmax), lmin),
+    ripple: mapK(o => o.ripple), ripple_pct: mapK(o => o.ripple / (o.mode === "BUCK" ? iout : o.iin) * 100),
+    duty: mapK(o => o.duty), mode: mapK(o => o.mode), rdiff: c.r_cs, ton_min: tonMin, cdiff_ideal: cCs, cdiff: e12(cCs) };
+
+  // Step 3
+  const vthMin = dev.vcs_min, vth = dev.vcs_typ, vthMax = dev.vcs_max, margin = d.ilimit_margin / 100;
+  let rsIdeal;
+  if (d.rs_calc_mode === 0) {
+    const ipp = dIdealMin * d.vin_min / (L * fsw), iinAvgMax = vout * iout / (d.efficiency * d.vin_min);
+    rsIdeal = vthMin / ((iinAvgMax + 0.5 * ipp) * (1 + margin));
+  } else rsIdeal = vth / (Math.max(iout, vout / d.vin_min * iout) * 1.43);
+  const ipeak = mapK(o => model === "xlsm" ? (o.mode === "BUCK" ? iout / d.efficiency : o.iin) + o.ripple / 2 : o.il_peak);
+  const rslopeIdeal = L / rs * 50e6, rslopeRec = e96(rslopeIdeal), rslope = d.rslope ? d.rslope : rslopeRec;
+  const rsL = rs / L;
+  res.step3 = { rs_ideal: rsIdeal, ilpk_limit: vthMax / rs, ipeak, ipeak_max: Math.max(...Object.values(ipeak)),
+    p_rs_oc: (vthMax / rs) ** 2 * rs * (vout / d.vin_max),
+    p_rs_oc_datasheet: d.vin_max > vout ? (vthMax / rs) ** 2 * rs * (1 - vout / d.vin_max) : null,
+    rslope_ideal: rslopeIdeal, rslope_recommended: rslopeRec, rslope,
+    iout_ocp: mapK(o => (vth / rs - o.ripple / 2) * (1 - o.d_boost_leg)),
+    rs_over_l: rsL, rs_in_range: rsL > 100 && rsL < 8000 && rsL < fsw / (vout * 10),
+    rs_rms_full_load: Math.max(...K3.map(k => ops[k].irs_rms)) };
+
+  // Step 4
+  const o = ops.min, ox = ops.max, vr = d.vout_ripple;
+  let coutMin, esrMax, vripple;
+  if (o.mode === "BUCK") {
+    coutMin = o.ripple / (fsw * 8 * vr);
+    const q = (vr / o.ripple) ** 2 - (1 / (fsw * d.cout * 8)) ** 2;
+    esrMax = q >= 0 ? Math.sqrt(q) : null;
+    vripple = ox.ripple * Math.sqrt(d.cout_esr ** 2 + (1 / (8 * fsw * d.cout)) ** 2);
+  } else {
+    const db = o.d_boost_leg;
+    coutMin = iout * db / (vr * fsw);
+    esrMax = (vr - iout * db / (fsw * d.cout)) / iout;
+    vripple = d.cout_esr * iout + iout * db / (fsw * d.cout);
+  }
+  if (esrMax !== null && (esrMax > 0.3 || esrMax < 0)) esrMax = null;
+  const icout = mapK(op => model === "xlsm" ? (op.mode === "BUCK" ? op.ripple / Math.sqrt(12) : iout * Math.sqrt((vout - op.vin) / op.vin)) : op.icout_rms);
+  res.step4 = { cout_min: Math.max(coutMin, 0.1e-6), esr_max: esrMax, vripple, icout_rms: icout, icout_rms_max: Math.max(...Object.values(icout)) };
+
+  // Step 5
+  const vir = d.vin_ripple, useHalf = d.vin_max >= 2 * vout;
+  let cinMin, cinEsrMax, vinRipple;
+  if (ox.mode !== "BOOST") {
+    const Dx = useHalf ? 0.5 : ox.d_buck_leg, q = iout * Dx * (1 - Dx);
+    cinMin = q / (vir * fsw);
+    cinEsrMax = -(q / (d.cin * fsw) - vir) / (iout + ox.ripple / 2);
+    vinRipple = q / (d.cin * fsw) + (iout + ox.ripple / 2) * d.cin_esr;
+  } else {
+    cinMin = ox.ripple / (fsw * 8 * vir);
+    const q = (vir / ox.ripple) ** 2 - (1 / (fsw * d.cin * 8)) ** 2;
+    cinEsrMax = q >= 0 ? Math.sqrt(q) : null;
+    vinRipple = ox.ripple * Math.sqrt(d.cin_esr ** 2 + (1 / (8 * fsw * d.cin)) ** 2);
+  }
+  if (cinEsrMax !== null && (cinEsrMax > 0.3 || cinEsrMax < 0)) cinEsrMax = null;
+  const icin = mapK((op, k) => {
+    if (model !== "xlsm") return op.icin_rms;
+    if (op.mode === "BUCK") { const D2 = k === "min" ? ops.max.duty : op.duty; return iout * Math.sqrt(op.duty * (1 - D2)); }
+    return op.ripple / Math.sqrt(12);
+  });
+  res.step5 = { cin_min: Math.max(cinMin, 10e-6), esr_max: cinEsrMax, vripple: vinRipple, icin_rms: icin,
+    icin_rms_max: Math.max(...Object.values(icin)), d_half_used: useHalf };
+
+  // Step 6
+  const cssIdeal = c.iss * d.tss / c.vref;
+  const cfg = 1 + (d.cfg_drss - 1) + (d.cfg_hiccup - 1) * 2 + (d.cfg_imon_lim > 2 ? 4 : 0) + (d.cfg_psm - 1) * 8;
+  const ruv1 = (d.vin_uvlo_on - c.vuvlo_on * d.vin_uvlo_off / c.vuvlo_off) / c.iuvlo;
+  const ruv2 = ruv1 > 0 ? ruv1 / (d.vin_uvlo_off / c.vuvlo_off - 1) : null;
+  const ruv1s = ruv1 > 0 ? e96(ruv1) : null, ruv2s = ruv2 ? e96(ruv2) : null;
+  const imonlim = d.cfg_imon_lim - 1, rshunt = rshuntOf(d);
+  res.step6 = { tss_recommended: d.cout * vout / iout, css_ideal: cssIdeal, css: e12(cssIdeal), cfg, rcfg: RCFG_TABLE[cfg - 1] * 1e3,
+    ruv1_ideal: ruv1, ruv2_ideal: ruv2, ruv1: ruv1s, ruv2: ruv2s,
+    uvlo_on_actual: ruv1s && ruv2s ? (ruv1s + ruv2s) / ruv2s * c.vuvlo_on + c.iuvlo * ruv1s : null,
+    uvlo_off_actual: ruv1s && ruv2s ? (ruv1s + ruv2s) / ruv2s * c.vuvlo_off : null,
+    imonlim_select: imonlim, rshunt, vimon_max: [null, 1.5, 5.0, 0.0][imonlim],
+    rimonout: imonlim === 1 ? 1.5 / (d.current_setpoint * rshunt * dev.gm_imon) : null,
+    sync_at_startup: { 2: "High", 3: "Low" }[imonlim] || null, p_shunt: rshunt * iout ** 2 };
+
+  // Step 7
+  const on = ops.nom, vin = d.vin_nom, ri = rs * c.csamp_gain, afb = c.vref / vout;
+  let boostLike, dss, fRhpNom, rhp;
+  if (on.mode === "BUCK-BOOST") {
+    const d1 = on.d_buck_leg, d2 = on.d_boost_leg;
+    boostLike = vin < vout;
+    dss = Math.min(Math.max(boostLike ? 1 - (1 - d2) / d1 : d1 / (1 - d2), 0), 0.99);
+    fRhpNom = (1 - d2) ** 2 * rout / (2 * PI * L * d1); rhp = true;
+  } else {
+    boostLike = on.mode === "BOOST"; dss = on.duty;
+    fRhpNom = (1 - dss) ** 2 * rout / (2 * PI * L); rhp = boostLike;
+  }
+  const om = ops.min;
+  const fRhpMin = om.mode === "BUCK-BOOST" ? (1 - om.d_boost_leg) ** 2 * rout / (2 * PI * L * om.d_buck_leg)
+    : (1 - om.duty) ** 2 * rout / (2 * PI * L);
+  const gm = c.gm_ea;
+  const seExt = (Math.abs(vin - vout) * c.gm_slopecomp + c.isc_const) / (c.cslope * rslope * ri);
+  let sn, sf;
+  if (vin > vout) { sn = (vin - vout) / L; sf = vout / L; } else { sn = vin / L; sf = (vout - vin) / L; }
+  const mcBuck = 1 + seExt / sf, mcBoost = 1 + seExt / sn;
+  const mc = boostLike ? mcBoost : mcBuck, k = boostLike ? mcBoost * (1 - dss) : mcBuck * dss;
+  const Q = 1 / PI / (k - 0.5);
+  const cbw = gm / (2 * PI * c.gbw), aea = gm * c.roea, acs = 1 / ri;
+  const am = boostLike ? rout * (1 - dss) / (2 * ri) : rout / ri / (1 + rout * (k - 0.5) / (fsw * L));
+  const fLoad = (boostLike ? 2 : 1) / (2 * PI * rout * d.cout), fEsr = 1 / (2 * PI * d.cout * d.cout_esr);
+  const fc = d.fcross;
+  const rcompIdeal = boostLike
+    ? fc * d.cout * 2 * PI * ri / (gm * afb * (1 - dss) * Math.sqrt(1 + (fc / fRhpNom) ** 2))
+    : fc * d.cout * 2 * PI * ri / (gm * afb);
+  const ccompIdeal = 1 / (rcompIdeal * (1.5 * fLoad) * 2 * PI);
+  const chfIdeal = Math.max(1 / (rcompIdeal * 2 * PI * Math.max(fc * 7, fc * 10)) - cbw, 0);
+  const rcomp = d.rcomp ? d.rcomp : e96(rcompIdeal), ccomp = d.ccomp ? d.ccomp : e12(ccompIdeal), chf = d.chf ? d.chf : e12(chfIdeal);
+  const fpEa = 1 / (2 * PI * (c.roea + rcomp) * ccomp), fzComp = 1 / (2 * PI * rcomp * ccomp), fpComp = 1 / (2 * PI * rcomp * (chf + cbw));
+  const fcSug = [fsw * 0.05];
+  if (d.vin_min < vout) fcSug.push(fRhpMin / 4);
+  if (rhp) fcSug.push(fRhpNom / 4);
+  const rfbbIdeal = vout === c.vref ? null : c.vref * d.rfbt / (vout - c.vref);
+  const rfbb = rfbbIdeal === null ? null : e96(rfbbIdeal);
+  const bodeP = { adc: am * afb * aea, aea, acs, am, Q, f_load: fLoad, f_esr: fEsr, f_rhp: fRhpNom, rhp,
+    fp_ea: fpEa, fz_comp: fzComp, fp_comp: fpComp, f_sample: fsw / 2 };
+  res.step7 = { small_signal_mode: boostLike ? "BOOST" : "BUCK", duty_small_signal: dss, f_load: fLoad, f_esr: fEsr,
+    f_rhp_min: (d.vin_min < vout || om.mode !== "BUCK") ? fRhpMin : null, f_rhp_nom: rhp ? fRhpNom : null,
+    fc_suggested: Math.min(...fcSug), fcross: fc, fp_ea: fpEa, rfbt: d.rfbt, rfbb_ideal: rfbbIdeal, rfbb,
+    vout_actual: rfbb ? c.vref * (d.rfbt + rfbb) / rfbb : c.vref,
+    rcomp_ideal: rcompIdeal, ccomp_ideal: ccompIdeal, chf_ideal: chfIdeal, rcomp, ccomp, chf,
+    fz_comp: fzComp, fp_comp: fpComp, ri, afb, aea, am, mc, k, Q, se_ext: seExt, sn, sf, cbw, adc: bodeP.adc };
+  const xl = model === "xlsm";
+  const freqs = xl ? XLSM_FREQS.slice() : freqGrid(nPerDec);
+  const bodeV = voltageLoopBode(bodeP, freqs, !xl);
+  res.step7.fc_bode = bodeV.fc; res.step7.pm_bode = bodeV.pm;
+
+  // Step 7.2
+  const dutyIl = xl ? (vin >= vout ? vout / vin : (vout - vin) / vout) : dss;
+  const ilP = { vin, duty_il: dutyIl, rshunt };
+  const g1 = currentLimitBode(d, ilP, [1.0], false).plant_gain[0];
+  const fcb = bodeV.fc || fc;
+  const cIl = dev.gm_il / (3 * fcb * Math.pow(10, g1 / 20)), rIl = 1 / (2 * PI * cIl * 20 * 3 * fcb);
+  const bodeIl = currentLimitBode(d, ilP, freqs, !xl);
+  res.step7_2 = { cimon_recommended: cIl, cimon_std: e12(cIl), rimon_recommended: rIl, rimon_std: e96(rIl),
+    cimon: d.cimon, rimon: d.rimon, plant_gain_1hz_db: g1, fc_bode: bodeIl.fc, pm_bode: bodeIl.pm,
+    il_zero: bodeIl.il_zero, il_pole1: bodeIl.il_pole1, il_pole2: bodeIl.il_pole2 };
+
+  // Step 8
+  res.step8 = mapK(op => { const l = losses(d, op.vin); delete l.op; return Object.assign({ vin: op.vin }, l); });
+  if (withCurves) {
+    res.bode_voltage = bodeV; res.bode_current_limit = bodeIl;
+    res.efficiency_vs_vin = efficiencyVsVin(d); res.efficiency_vs_load = efficiencyVsLoad(d);
+  }
+  return res;
+}
+if (typeof module !== "undefined") module.exports = { defaultDesign, calculate, operatingPoint, losses,
+  efficiencyVsVin, efficiencyVsLoad, lm5177Transitions, e96, e12 };
+</script>
+
+<script>
+/* ===== UI ===== */
+"use strict";
+const $ = s => document.querySelector(s);
+const STORE = "lm51770-calc-v1";
+const fmt = (x, nd = 3) => (x === null || x === undefined || !isFinite(x)) ? "N/A" : Number(x).toFixed(nd);
+
+/* input field definitions: [key, label, unit, scale (display × scale = SI), step] */
+const FIELDS = [
+  ["Step 1：操作規格", [
+    ["device", "Device", "", null, null, ["LM51770", "LM517701"]],
+    ["vin_min", "VIN(min)", "V", 1], ["vin_nom", "VIN(nom)", "V", 1], ["vin_max", "VIN(max)", "V", 1],
+    ["vout", "VOUT", "V", 1], ["iout", "IOUT(max)", "A", 1], ["fsw", "切換頻率 fSW", "kHz", 1e3],
+    ["efficiency", "估計效率 η", "%", 0.01], ["mode_fpwm", "操作模式", "", null, null, [["true", "FPWM"], ["false", "PSM"]]],
+  ]],
+  ["Step 2：電感", [["lf", "電感 LF", "µH", 1e-6], ["rdcr", "DCR", "mΩ", 1e-3]]],
+  ["Step 3：OCP / RS / Slope", [
+    ["ilimit_margin", "峰值限流裕度", "%", 1], ["rs", "感測電阻 RS", "mΩ", 1e-3],
+    ["rslope", "RSLOPE（空白 = 建議值）", "kΩ", 1e3], ["rs_calc_mode", "RS 建議算法", "", null, null, [["1", "Joerg (xlsm)"], ["0", "Datasheet 式23"]]],
+  ]],
+  ["Step 4：輸出電容", [["vout_ripple", "輸出漣波規格", "mVpp", 1e-3], ["cout", "COUT", "µF", 1e-6], ["cout_esr", "COUT ESR", "mΩ", 1e-3]]],
+  ["Step 5：輸入電容", [["vin_ripple", "輸入漣波規格", "mVpp", 1e-3], ["cin", "CIN", "µF", 1e-6], ["cin_esr", "CIN ESR", "mΩ", 1e-3]]],
+  ["Step 6：軟啟動 / UVLO / CFG", [
+    ["tss", "軟啟動 tSS", "ms", 1e-3], ["vin_uvlo_on", "UVLO On", "V", 1], ["vin_uvlo_off", "UVLO Off", "V", 1],
+    ["cfg_drss", "DRSS 展頻", "", null, null, [["1", "off"], ["2", "on"]]],
+    ["cfg_hiccup", "SCP Hiccup", "", null, null, [["1", "off"], ["2", "on"]]],
+    ["cfg_psm", "PSM 進入門檻", "", null, null, [["1", "10 %"], ["2", "15 %"]]],
+    ["cfg_imon_lim", "IMON / ILIMIT", "", null, null, [["1", "off"], ["2", "IMON"], ["3", "ILIMIT 正向"], ["4", "ILIMIT 負向"]]],
+    ["current_setpoint", "監測 / 限流電流", "A", 1],
+  ]],
+  ["Step 7：補償", [
+    ["fcross", "期望交越頻率", "kHz", 1e3], ["rfbt", "RFBT", "kΩ", 1e3],
+    ["rcomp", "RCOMP（空白 = 標準值）", "kΩ", 1e3], ["ccomp", "CCOMP（空白 = 標準值）", "nF", 1e-9], ["chf", "CHF（空白 = 標準值）", "pF", 1e-12],
+  ]],
+  ["Step 7.2：電流限制迴路補償", [["cimon", "選用 CIMON", "nF", 1e-9], ["rimon", "選用 RIMON", "kΩ", 1e3]]],
+  ["Step 8：外接蕭特基", [
+    ["vf_schottky_buck", "Buck 側 VF", "V", 1], ["qrr_schottky_buck", "Buck 側 QRR", "nC", 1e-9],
+    ["vf_schottky_boost", "Boost 側 VF", "V", 1], ["qrr_schottky_boost", "Boost 側 QRR", "nC", 1e-9],
+  ]],
+];
+const MOS_FIELDS = [["rdson", "RDS(on)", "mΩ", 1e-3], ["qg", "QG", "nC", 1e-9], ["qgd", "QGD", "nC", 1e-9],
+  ["qgs", "QGS", "nC", 1e-9], ["rg", "RG", "Ω", 1], ["gfs", "gFS", "S", 1], ["vth", "VTH", "V", 1],
+  ["vsd", "VBD", "V", 1], ["qrr", "QRR", "nC", 1e-9], ["theta_ja", "θJA", "°C/W", 1]];
+
+let design = loadDesign();
+let lastResult = null;
+
+function loadDesign() {
+  const d = defaultDesign();
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (s && typeof s === "object") {
+      for (const k in s) if (k in d) d[k] = (k.length === 2 && k[0] === "q") ? Object.assign(defaultMosfet(), s[k]) : s[k];
+    }
+  } catch (e) { /* storage unavailable */ }
+  return d;
+}
+function saveDesign() { try { localStorage.setItem(STORE, JSON.stringify(design)); } catch (e) { /* ignore */ } }
+const round6 = x => Number(Number(x).toPrecision(6));
+
+function buildInputs() {
+  const box = $("#inputs");
+  box.innerHTML = "<h2>輸入</h2>";
+  FIELDS.forEach(([title, fields], gi) => {
+    const det = document.createElement("details");
+    det.open = gi < 2;
+    det.innerHTML = `<summary>${title}</summary>`;
+    for (const [key, label, unit, scale, , opts] of fields) {
+      const row = document.createElement("div");
+      row.className = "field";
+      let ctl;
+      if (opts) {
+        ctl = document.createElement("select");
+        for (const o of opts) {
+          const [v, t] = Array.isArray(o) ? o : [o, o];
+          ctl.add(new Option(t, v));
+        }
+        ctl.value = String(design[key]);
+      } else {
+        ctl = document.createElement("input");
+        ctl.type = "number"; ctl.step = "any";
+        ctl.value = design[key] === null ? "" : round6(design[key] / scale);
+      }
+      ctl.id = "in_" + key;
+      ctl.addEventListener("change", () => {
+        if (opts) {
+          const v = ctl.value;
+          design[key] = key === "device" ? v : (key === "mode_fpwm" ? v === "true" : Number(v));
+        } else {
+          design[key] = ctl.value === "" ? null : Number(ctl.value) * scale;
+        }
+        update();
+      });
+      const lab = document.createElement("span"); lab.textContent = label;
+      const u = document.createElement("span"); u.className = "u"; u.textContent = unit;
+      row.append(lab, ctl, u);
+      det.append(row);
+    }
+    box.append(det);
+  });
+  // MOSFET table
+  const det = document.createElement("details");
+  det.innerHTML = "<summary>Step 8：MOSFET（Q1/Q2 Buck 臂、Q3/Q4 Boost 臂）</summary>";
+  const tbl = document.createElement("table");
+  tbl.className = "mos";
+  tbl.innerHTML = "<tr><th></th><th>Q1 高側</th><th>Q2 低側</th><th>Q3 高側</th><th>Q4 低側</th><th></th></tr>";
+  for (const [key, label, unit, scale] of MOS_FIELDS) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${label}</td>`;
+    for (const q of ["q1", "q2", "q3", "q4"]) {
+      const td = document.createElement("td");
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.step = "any"; inp.value = round6(design[q][key] / scale);
+      inp.addEventListener("change", () => { design[q][key] = Number(inp.value) * scale; update(); });
+      td.append(inp); tr.append(td);
+    }
+    const tu = document.createElement("td"); tu.className = "note"; tu.textContent = unit; tr.append(tu);
+    tbl.append(tr);
+  }
+  det.append(tbl);
+  box.append(det);
+}
+
+/* ---------- SVG plotting ---------- */
+function niceTicks(lo, hi, n) {
+  const span = hi - lo || 1, step0 = span / (n || 5), mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= (n || 5)) || mag * 10;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9 * step; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+function fmtTick(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6) + "M"; if (a >= 1e3) return (v / 1e3) + "k"; return String(+v.toPrecision(4));
+}
+/* opts: {xlog, xlabel, ylabel, y2label, series:[{x,y,name,color,axis:1|2,dash,step}], vlines:[{x,label}], bands:[{x0,x1,fill,label}], height} */
+function plot(el, opts) {
+  const W = 640, H = opts.height || 300, m = { l: 52, r: opts.y2label ? 52 : 14, t: 12, b: 40 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const xs = opts.series.flatMap(s => s.x);
+  let x0 = Math.min(...xs), x1 = Math.max(...xs);
+  if (opts.xrange) [x0, x1] = opts.xrange;
+  const tx = opts.xlog ? (v => (Math.log10(v) - Math.log10(x0)) / (Math.log10(x1) - Math.log10(x0)) * pw + m.l)
+    : (v => (v - x0) / (x1 - x0 || 1) * pw + m.l);
+  const rng = ax => {
+    const ys = opts.series.filter(s => (s.axis || 1) === ax).flatMap(s => s.y).filter(isFinite);
+    if (!ys.length) return null;
+    let lo = Math.min(...ys), hi = Math.max(...ys);
+    if (opts["y" + ax + "range"]) [lo, hi] = opts["y" + ax + "range"];
+    const pad = (hi - lo) * 0.06 || 1;
+    const t = niceTicks(lo - pad, hi + pad, 6);
+    return { lo: Math.min(t[0], lo), hi: Math.max(t[t.length - 1], hi), ticks: t };
+  };
+  const r1 = rng(1), r2 = rng(2);
+  const ty = (r, v) => m.t + ph - (v - r.lo) / (r.hi - r.lo || 1) * ph;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.title || "chart"}">`;
+  for (const b of opts.bands || []) {
+    const a = tx(Math.max(b.x0, x0)), z = tx(Math.min(b.x1, x1));
+    if (z > a) s += `<rect x="${a}" y="${m.t}" width="${z - a}" height="${ph}" fill="${b.fill}" opacity="0.7"/>` +
+      (b.label ? `<text x="${(a + z) / 2}" y="${m.t + 12}" text-anchor="middle">${b.label}</text>` : "");
+  }
+  // x grid
+  let xt;
+  if (opts.xlog) { xt = []; for (let e = Math.ceil(Math.log10(x0)); e <= Math.floor(Math.log10(x1)); e++) xt.push(Math.pow(10, e)); }
+  else xt = niceTicks(x0, x1, 8);
+  for (const v of xt) s += `<line x1="${tx(v)}" x2="${tx(v)}" y1="${m.t}" y2="${m.t + ph}" stroke="var(--grid)"/><text x="${tx(v)}" y="${m.t + ph + 14}" text-anchor="middle">${fmtTick(v)}</text>`;
+  if (opts.xlog) for (let e = Math.floor(Math.log10(x0)); e < Math.log10(x1); e++) for (let k = 2; k < 10; k++) {
+    const v = k * Math.pow(10, e); if (v > x0 && v < x1) s += `<line x1="${tx(v)}" x2="${tx(v)}" y1="${m.t}" y2="${m.t + ph}" stroke="var(--grid)" opacity="0.5"/>`;
+  }
+  if (r1) for (const v of r1.ticks) s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${ty(r1, v)}" y2="${ty(r1, v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${ty(r1, v) + 4}" text-anchor="end">${fmtTick(v)}</text>`;
+  if (r2) for (const v of r2.ticks) s += `<text x="${m.l + pw + 6}" y="${ty(r2, v) + 4}">${fmtTick(v)}</text>`;
+  if (opts.zeroLine && r1 && r1.lo < 0 && r1.hi > 0) s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${ty(r1, 0)}" y2="${ty(r1, 0)}" stroke="var(--muted)" stroke-width="0.8"/>`;
+  for (const v of opts.vlines || []) if (v.x >= x0 && v.x <= x1) s += `<line x1="${tx(v.x)}" x2="${tx(v.x)}" y1="${m.t}" y2="${m.t + ph}" stroke="${v.color || "var(--muted)"}" stroke-dasharray="4 3"/><text x="${tx(v.x) + 3}" y="${m.t + ph - 4}">${v.label || ""}</text>`;
+  for (const se of opts.series) {
+    const r = (se.axis || 1) === 1 ? r1 : r2;
+    let dpath = "", pen = false;
+    se.x.forEach((xv, i) => {
+      const yv = se.y[i];
+      if (!isFinite(yv) || xv < x0 || xv > x1) { pen = false; return; }
+      dpath += (pen ? "L" : "M") + tx(xv).toFixed(1) + "," + ty(r, yv).toFixed(1); pen = true;
+    });
+    s += `<path d="${dpath}" fill="none" stroke="${se.color}" stroke-width="2" ${se.dash ? `stroke-dasharray="${se.dash}"` : ""}/>`;
+  }
+  for (const p of opts.points || []) {
+    const r = (p.axis || 1) === 1 ? r1 : r2;
+    s += `<circle cx="${tx(p.x)}" cy="${ty(r, p.y)}" r="4" fill="${p.color}"/>`;
+  }
+  s += `<rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="none" stroke="var(--line)"/>`;
+  s += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle">${opts.xlabel || ""}</text>`;
+  if (opts.ylabel) s += `<text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">${opts.ylabel}</text>`;
+  if (opts.y2label) s += `<text transform="translate(${W - 8} ${m.t + ph / 2}) rotate(90)" text-anchor="middle">${opts.y2label}</text>`;
+  s += `<rect class="hit" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent"/></svg>`;
+  el.innerHTML = s + `<div class="legend">${opts.series.filter(x => x.name).map(x => `<span><i style="background:${x.color}"></i>${x.name}</span>`).join("")}</div>`;
+  // hover readout
+  const svg = el.querySelector("svg"), tip = $("#tip");
+  svg.querySelector(".hit").addEventListener("mousemove", ev => {
+    const bb = svg.getBoundingClientRect(), px = (ev.clientX - bb.left) / bb.width * W;
+    const fr = (px - m.l) / pw;
+    const xv = opts.xlog ? Math.pow(10, Math.log10(x0) + fr * (Math.log10(x1) - Math.log10(x0))) : x0 + fr * (x1 - x0);
+    let lines = [`${opts.xlabel || "x"}: ${fmtTick(+xv.toPrecision(4))}`];
+    for (const se of opts.series) {
+      if (!se.name) continue;
+      let bi = 0, bd = Infinity;
+      se.x.forEach((v, i) => { const dd = Math.abs((opts.xlog ? Math.log10(v) - Math.log10(xv) : v - xv)); if (dd < bd) { bd = dd; bi = i; } });
+      lines.push(`${se.name}: ${fmt(se.y[bi], 2)}`);
+    }
+    tip.textContent = lines.join("\n"); tip.style.display = "block";
+    tip.style.left = (ev.clientX + 14) + "px"; tip.style.top = (ev.clientY + 10) + "px";
+  });
+  svg.querySelector(".hit").addEventListener("mouseleave", () => { tip.style.display = "none"; });
+}
+
+/* display-only phase unwrap (removes ±360° jumps) */
+function unwrap(ph) {
+  const out = []; let off = 0;
+  ph.forEach((v, i) => { if (i) { const d = v + off - out[i - 1]; if (d > 180) off -= 360; else if (d < -180) off += 360; } out.push(v + off); });
+  return out;
+}
+/* ---------- results ---------- */
+const row = (label, val, unit, note) => `<tr><td>${label}${note ? `<div class="note">${note}</div>` : ""}</td><td class="v">${val}</td><td class="note">${unit || ""}</td></tr>`;
+const tag = m => `<span class="tag ${m}">${m}</span>`;
+
+function render(r) {
+  const d = design, s1 = r.step1, s2 = r.step2, s3 = r.step3, s4 = r.step4, s5 = r.step5, s6 = r.step6, s7 = r.step7, s72 = r.step7_2;
+  const ops = r.operating_points, tr = s1.transitions;
+  const K = ["min", "nom", "max"], KL = { min: "VIN(min)", nom: "VIN(nom)", max: "VIN(max)" };
+  const warn = (cond, txt) => cond ? `<span class="warn">${txt}</span>` : txt;
+  let h = "";
+  h += `<div class="panel"><h2>重點</h2><div class="kpis">
+    <div class="kpi"><span>建議電感</span><b>${fmt(s2.l_recommended * 1e6, 3)} µH</b></div>
+    <div class="kpi"><span>最大電感峰值</span><b>${fmt(s3.ipeak_max, 2)} A</b></div>
+    <div class="kpi"><span>電壓迴路 fc / PM</span><b>${fmt(s7.fc_bode / 1e3, 2)} kHz / ${fmt(s7.pm_bode, 1)}°</b></div>
+    <div class="kpi"><span>限流迴路 fc / PM</span><b>${fmt(s72.fc_bode / 1e3, 2)} kHz / ${fmt(s72.pm_bode, 1)}°</b></div>
+    <div class="kpi"><span>效率 @VIN(min/nom/max)</span><b>${K.map(k => fmt(r.step8[k].efficiency * 100, 1)).join(" / ")} %</b></div>
+  </div></div>`;
+
+  // Duty card
+  h += `<div class="panel"><h2>Duty（${r.model === "lm5177" ? "LM5177 四開關時序" : "xlsm 原始算法"}）</h2>
+    <table><tr><th></th><th>VIN</th><th>模式</th><th>D Buck 臂 (Q1)</th><th>D Boost 臂 (Q4)</th><th>t1 / t2 / t3 (ns)</th></tr>
+    ${K.map(k => { const o = ops[k]; return `<tr><td>${KL[k]}</td><td class="v">${fmt(o.vin, 2)} V</td><td>${tag(o.mode)}</td>
+      <td class="v">${fmt(o.d_buck_leg, 4)}</td><td class="v">${fmt(o.d_boost_leg, 4)}</td>
+      <td class="v">${fmt(o.t1 * 1e9, 0)} / ${fmt(o.t2 * 1e9, 0)} / ${fmt(o.t3 * 1e9, 0)}</td></tr>`; }).join("")}</table>
+    <h3>LM5177 轉換電壓</h3>
+    <table>${row("Boost → Buck-Boost", fmt(tr.vin_boost_to_bb, 2), "V")}${row("Buck-Boost → Boost", fmt(tr.vin_bb_to_boost, 2), "V")}
+    ${row("Buck → Buck-Boost", fmt(tr.vin_buck_to_bb, 2), "V")}${row("Buck-Boost → Buck", fmt(tr.vin_bb_to_buck, 2), "V")}
+    ${row("Buck-Boost 固定直通時間 t1 (Q1+Q3)", fmt(tr.t1_bb * 1e9, 0), "ns", "= T − (0.175·T + 2·tmin)")}
+    ${row("最小脈寬 tmin", fmt(tr.t_min_pulse * 1e9, 0), "ns")}</table>
+    <p class="note">BUCK：D = (VOUT + (R<sub>DS2</sub>+RS+DCR)·IOUT)/(VIN + (RS+R<sub>DS2</sub>−R<sub>DS1</sub>)·IOUT)；
+    BOOST：D = (VOUT + (R<sub>DS3</sub>+DCR)·IIN − VIN)/(VOUT + (R<sub>DS3</sub>−R<sub>DS4</sub>−RS)·IIN)；
+    BUCK-BOOST：t2 = (VOUT·T − VIN·t1)/(VIN+VOUT)、t3 = T − t1 − t2（伏秒平衡），D<sub>buck</sub> = (t1+t2)/T、D<sub>boost</sub> = t2/T。</p>
+    <div class="chart" id="ch_mode"></div>
+    <h3>電感電流波形</h3><div class="chart" id="ch_il"></div></div>`;
+
+  h += `<div class="cards">`;
+  h += `<div class="panel"><h2>Step 1：操作規格</h2><table>
+    ${row("RT", s1.rt === null ? "N/A" : fmt(s1.rt / 1e3, 1), "kΩ", `理想 ${fmt(s1.rt_ideal / 1e3, 2)} kΩ`)}
+    ${row("ROUT / POUT / PIN", `${fmt(s1.rout, 3)} / ${fmt(s1.pout, 1)} / ${fmt(s1.pin, 1)}`, "Ω / W / W")}
+    ${row("IIN @ min/nom/max", `${fmt(s1.iin_min, 2)} / ${fmt(s1.iin_nom, 2)} / ${fmt(s1.iin_max, 2)}`, "A")}</table></div>`;
+  h += `<div class="panel"><h2>Step 2：電感</h2><table>
+    ${row("建議電感值", fmt(s2.l_recommended * 1e6, 3), "µH", `Lopt ${fmt(s2.lopt * 1e6, 3)}，限制 ${fmt(s2.lmin * 1e6, 3)} ~ ${fmt(s2.lmax * 1e6, 3)} µH`)}
+    ${K.map(k => row(`ΔIL @${KL[k]}`, `${fmt(s2.ripple[k], 2)} (${fmt(s2.ripple_pct[k], 1)} %)`, "Apk-pk")).join("")}
+    ${row("建議 RDIFF / CDIFF", `${fmt(s2.rdiff, 0)} Ω / ${fmt(s2.cdiff * 1e12, 0)}`, "pF", `tON,min = ${fmt(s2.ton_min * 1e9, 1)} ns`)}</table></div>`;
+  h += `<div class="panel"><h2>Step 3：OCP / RS / Slope</h2><table>
+    ${row("建議感測電阻", fmt(s3.rs_ideal * 1e3, 3), "mΩ")}
+    ${row("RS/L 範圍檢查", s3.rs_in_range ? '<span class="ok">OK</span>' : '<span class="warn">NG</span>', "", `RS/L = ${fmt(s3.rs_over_l, 0)}（100 ~ 8000，且 < fSW/(10·VOUT)）`)}
+    ${row("ILPK,Limit", fmt(s3.ilpk_limit, 2), "A")}
+    ${row("最大電感峰值電流", warn(s3.ipeak_max > s3.ilpk_limit * 0.8, fmt(s3.ipeak_max, 2)), "A")}
+    ${row("過流時 RS 功耗", fmt(s3.p_rs_oc, 3), "W", `datasheet 式24：${fmt(s3.p_rs_oc_datasheet, 3)} W`)}
+    ${row("RSLOPE", fmt(s3.rslope / 1e3, 1), "kΩ", `理想 ${fmt(s3.rslope_ideal / 1e3, 2)} kΩ`)}
+    ${K.map(k => row(`OCP 時 IOUT @${KL[k]}`, fmt(s3.iout_ocp[k], 2), "A")).join("")}</table></div>`;
+  h += `<div class="panel"><h2>Step 4：輸出電容</h2><table>
+    ${row("最小輸出電容", warn(d.cout < s4.cout_min, fmt(s4.cout_min * 1e6, 2)), "µF")}
+    ${row("最大允許 ESR", s4.esr_max === null ? "N/A" : warn(d.cout_esr > s4.esr_max, fmt(s4.esr_max * 1e3, 2)), "mΩ")}
+    ${row("輸出漣波", warn(s4.vripple > d.vout_ripple, fmt(s4.vripple * 1e3, 1)), "mVpp")}
+    ${row("COUT RMS 電流", fmt(s4.icout_rms_max, 2), "Arms")}</table></div>`;
+  h += `<div class="panel"><h2>Step 5：輸入電容</h2><table>
+    ${row("最小輸入電容", warn(d.cin < s5.cin_min, fmt(s5.cin_min * 1e6, 2)), "µF", s5.d_half_used ? "VIN(max) ≥ 2·VOUT，取 D = 0.5" : "")}
+    ${row("最大允許 ESR", s5.esr_max === null ? "N/A" : warn(d.cin_esr > s5.esr_max, fmt(s5.esr_max * 1e3, 2)), "mΩ")}
+    ${row("輸入漣波", warn(s5.vripple > d.vin_ripple, fmt(s5.vripple * 1e3, 1)), "mVpp")}
+    ${row("CIN RMS 電流", fmt(s5.icin_rms_max, 2), "Arms")}</table></div>`;
+  h += `<div class="panel"><h2>Step 6：軟啟動 / UVLO / CFG</h2><table>
+    ${row("建議最短 tSS", warn(d.tss <= s6.tss_recommended, fmt(s6.tss_recommended * 1e3, 2)), "ms")}
+    ${row("CSS", fmt(s6.css * 1e9, 1), "nF")}
+    ${row("CFG 編號 / RCFG", `#${s6.cfg} / ${fmt(s6.rcfg / 1e3, 3)}`, "kΩ")}
+    ${row("RUV1 / RUV2", `${fmt(s6.ruv1 / 1e3, 1)} / ${fmt(s6.ruv2 / 1e3, 1)}`, "kΩ", `實際門檻 ON ${fmt(s6.uvlo_on_actual, 3)} V / OFF ${fmt(s6.uvlo_off_actual, 3)} V`)}
+    ${row("RSHUNT", fmt(s6.rshunt * 1e3, 2), "mΩ", `損耗 ${fmt(s6.p_shunt, 2)} W`)}
+    ${s6.imonlim_select === 1 ? row("RIMON（IMONOUT）", fmt(s6.rimonout / 1e3, 1), "kΩ") : ""}
+    ${s6.sync_at_startup ? row("啟動時 SYNC 腳", s6.sync_at_startup, "") : ""}</table></div>`;
+  h += `<div class="panel"><h2>Step 7：電壓迴路補償</h2><table>
+    ${row("小訊號模型", `${s7.small_signal_mode} (D = ${fmt(s7.duty_small_signal, 4)})`, "")}
+    ${row("負載極點", fmt(s7.f_load, 0), "Hz")}${row("ESR 零點", fmt(s7.f_esr / 1e3, 1), "kHz")}
+    ${row("RHP 零點 @VIN(min)", s7.f_rhp_min === null ? "---" : fmt(s7.f_rhp_min / 1e3, 2), "kHz")}
+    ${row("RHP 零點 @VIN(nom)", s7.f_rhp_nom === null ? "---" : fmt(s7.f_rhp_nom / 1e3, 2), "kHz")}
+    ${row("建議交越頻率", warn(d.fcross > s7.fc_suggested, fmt(s7.fc_suggested / 1e3, 2)), "kHz")}
+    ${row("EA 極點", fmt(s7.fp_ea, 3), "Hz")}
+    ${row("RFBB", s7.rfbb === null ? "OPEN" : fmt(s7.rfbb / 1e3, 2), "kΩ", `實際 VOUT = ${fmt(s7.vout_actual, 3)} V`)}
+    ${row("RCOMP", fmt(s7.rcomp / 1e3, 3), "kΩ", `計算 ${fmt(s7.rcomp_ideal / 1e3, 3)} kΩ`)}
+    ${row("CCOMP", fmt(s7.ccomp * 1e9, 1), "nF", `計算 ${fmt(s7.ccomp_ideal * 1e9, 2)} nF，fZ = ${fmt(s7.fz_comp / 1e3, 3)} kHz`)}
+    ${row("CHF", fmt(s7.chf * 1e12, 0), "pF", `計算 ${fmt(s7.chf_ideal * 1e12, 0)} pF，fP = ${fmt(s7.fp_comp / 1e3, 1)} kHz`)}
+    ${row("Bode：交越頻率 / 相位裕度", `${fmt(s7.fc_bode / 1e3, 3)} kHz / ${warn(s7.pm_bode < 45, fmt(s7.pm_bode, 1) + "°")}`, "")}</table></div>`;
+  h += `<div class="panel"><h2>Step 7.2：電流限制迴路</h2><table>
+    ${row("建議 CIMON", `${fmt(s72.cimon_recommended * 1e9, 3)} → ${fmt(s72.cimon_std * 1e9, 2)}`, "nF")}
+    ${row("建議 RIMON", `${fmt(s72.rimon_recommended / 1e3, 3)} → ${fmt(s72.rimon_std / 1e3, 3)}`, "kΩ")}
+    ${row("選用 CIMON / RIMON", `${fmt(d.cimon * 1e9, 2)} nF / ${fmt(d.rimon / 1e3, 3)} kΩ`, "")}
+    ${row("Bode：交越頻率 / 相位裕度", `${fmt(s72.fc_bode / 1e3, 3)} kHz / ${fmt(s72.pm_bode, 1)}°`, "")}</table></div>`;
+  h += `</div>`;
+
+  h += `<div class="panel"><h2>Bode 圖：電壓迴路</h2><div class="chart" id="ch_bode"></div>
+    <h3>誤差放大器 / 功率級</h3><div class="chart" id="ch_bode_parts"></div></div>`;
+  h += `<div class="panel"><h2>Bode 圖：平均電流限制迴路</h2><div class="chart" id="ch_bode_il"></div></div>`;
+  h += `<div class="panel"><h2>Step 8：效率</h2><div class="chart" id="ch_eff_vin"></div>
+    <h3>效率 vs 負載 @VIN(nom)</h3><div class="chart" id="ch_eff_load"></div>
+    <h3>損耗分配 (W)</h3><table><tr><th>項目</th>${K.map(k => `<th>${KL[k]}</th>`).join("")}</tr>
+    ${[["inductor", "電感 (DCR+Core)"], ["q1", "Q1 Buck 控制"], ["q2", "Q2 Buck 同步"], ["q4", "Q4 Boost 控制"], ["q3", "Q3 Boost 同步"],
+      ["rr_buck", "反向恢復 Buck"], ["rr_boost", "反向恢復 Boost"], ["rs", "RS"], ["shunt", "RSHUNT"], ["cin", "CIN ESR"], ["cout", "COUT ESR"], ["ic", "IC (IQ+閘極)"]]
+      .map(([k, l]) => `<tr><td>${l}</td>${K.map(kk => `<td class="v">${fmt(r.step8[kk].losses[k], 3)}</td>`).join("")}</tr>`).join("")}
+    <tr><td><b>總損耗</b></td>${K.map(k => `<td class="v"><b>${fmt(r.step8[k].total_loss, 2)}</b></td>`).join("")}</tr>
+    <tr><td><b>效率 (%)</b></td>${K.map(k => `<td class="v"><b>${fmt(r.step8[k].efficiency * 100, 2)}</b></td>`).join("")}</tr></table></div>`;
+  $("#results").innerHTML = h;
+
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  // mode bar (duty vs VIN)
+  const ev = r.efficiency_vs_vin;
+  const bands = [];
+  for (let i = 0; i < ev.vin.length; i++) {
+    const m = ev.mode[i];
+    if (!bands.length || bands[bands.length - 1].m !== m) bands.push({ m, x0: ev.vin[i], x1: ev.vin[i] });
+    bands[bands.length - 1].x1 = ev.vin[Math.min(i + 1, ev.vin.length - 1)];
+  }
+  plot($("#ch_mode"), { xlabel: "VIN (V)", ylabel: "Duty", height: 220, y1range: [0, 1],
+    bands: bands.map(b => ({ x0: b.x0, x1: b.x1, fill: css(b.m === "BUCK" ? "--buck" : b.m === "BOOST" ? "--boost" : "--bb"), label: b.m })),
+    series: [{ x: ev.vin, y: ev.duty_buck_leg, name: "D Buck 臂 (Q1)", color: css("--c1") },
+      { x: ev.vin, y: ev.duty_boost_leg, name: "D Boost 臂 (Q4)", color: css("--c2") }],
+    vlines: K.map(k => ({ x: ops[k].vin, label: k })) });
+  // inductor current waveform
+  const wf = K.map((k, i) => {
+    const o = ops[k], xs = [0], ys = [o.segments[0].i_start]; let t = 0;
+    for (const sg of o.segments) { t += sg.dt; xs.push(t * 1e6); ys.push(sg.i_end); }
+    return { x: xs, y: ys, name: `${KL[k]} ${o.mode}`, color: css(["--c1", "--c3", "--c2"][i]) };
+  });
+  plot($("#ch_il"), { xlabel: "t (µs)", ylabel: "iL (A)", height: 240, series: wf });
+  // bode
+  const bv = r.bode_voltage, bi = r.bode_current_limit;
+  plot($("#ch_bode"), { xlog: true, xlabel: "頻率 (Hz)", ylabel: "增益 (dB)", y2label: "相位 (°)", zeroLine: true,
+    series: [{ x: bv.f, y: bv.gain, name: "迴路增益", color: css("--c1") }, { x: bv.f, y: unwrap(bv.phase), name: "迴路相位", color: css("--c2"), axis: 2 }],
+    vlines: [{ x: bv.fc, label: `fc ${fmt(bv.fc / 1e3, 2)} kHz, PM ${fmt(bv.pm, 1)}°`, color: css("--c3") }],
+    points: bv.fc ? [{ x: bv.fc, y: 0, color: css("--c3") }] : [] });
+  plot($("#ch_bode_parts"), { xlog: true, xlabel: "頻率 (Hz)", ylabel: "增益 (dB)", y2label: "相位 (°)", zeroLine: true, height: 260,
+    series: [{ x: bv.f, y: bv.ea_gain, name: "EA 增益", color: css("--c4") }, { x: bv.f, y: bv.plant_gain, name: "Plant 增益", color: css("--c3") },
+      { x: bv.f, y: bv.ea_phase, name: "EA 相位", color: css("--c4"), axis: 2, dash: "5 4" }, { x: bv.f, y: bv.plant_phase, name: "Plant 相位", color: css("--c3"), axis: 2, dash: "5 4" }] });
+  plot($("#ch_bode_il"), { xlog: true, xlabel: "頻率 (Hz)", ylabel: "增益 (dB)", y2label: "相位 (°)", zeroLine: true,
+    series: [{ x: bi.f, y: bi.gain, name: "迴路增益", color: css("--c1") }, { x: bi.f, y: unwrap(bi.phase), name: "迴路相位", color: css("--c2"), axis: 2 },
+      { x: bi.f, y: bi.plant_gain, name: "Plant 增益", color: css("--c3"), dash: "5 4" }],
+    vlines: [{ x: bi.fc, label: `fc ${fmt(bi.fc / 1e3, 2)} kHz, PM ${fmt(bi.pm, 1)}°`, color: css("--c3") }] });
+  // efficiency
+  plot($("#ch_eff_vin"), { xlabel: "VIN (V)", ylabel: "效率 (%)", y2label: "損耗 (W)",
+    bands: bands.map(b => ({ x0: b.x0, x1: b.x1, fill: css(b.m === "BUCK" ? "--buck" : b.m === "BOOST" ? "--boost" : "--bb") })),
+    series: [{ x: ev.vin, y: ev.efficiency, name: "效率", color: css("--c1") },
+      { x: ev.vin, y: ev.inductor, name: "電感損耗", color: css("--c3"), axis: 2, dash: "5 4" },
+      { x: ev.vin, y: ev.buck_ctrl.map((v, i) => v + ev.buck_sync[i] + ev.boost_ctrl[i] + ev.boost_sync[i]), name: "MOSFET 損耗", color: css("--c2"), axis: 2, dash: "5 4" }] });
+  const el = r.efficiency_vs_load;
+  plot($("#ch_eff_load"), { xlabel: "IOUT (A)", ylabel: "效率 (%)", y2label: "損耗 (W)", height: 260,
+    series: [{ x: el.iout, y: el.efficiency, name: "效率", color: css("--c1") }, { x: el.iout, y: el.total_loss, name: "總損耗", color: css("--c2"), axis: 2, dash: "5 4" }] });
+}
+
+function update() {
+  design.vin_direction = $("#vin_direction").value;
+  saveDesign();
+  try {
+    lastResult = calculate(design, $("#model").value);
+    render(lastResult);
+  } catch (e) {
+    $("#results").innerHTML = `<div class="panel warn">計算錯誤：${e.message}</div>`;
+    console.error(e);
+  }
+}
+
+$("#model").addEventListener("change", update);
+$("#vin_direction").addEventListener("change", update);
+$("#theme").addEventListener("change", e => {
+  if (e.target.value) document.documentElement.setAttribute("data-theme", e.target.value);
+  else document.documentElement.removeAttribute("data-theme");
+  update();
+});
+$("#reset").addEventListener("click", () => { design = defaultDesign(); buildInputs(); $("#vin_direction").value = "rising"; update(); });
+$("#export").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ inputs: design, results: lastResult }, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "lm51770_result.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("#vin_direction").value = design.vin_direction || "rising";
+buildInputs();
+update();
+</script>
+</body>
+</html>
